@@ -2,7 +2,7 @@ from imread_benchmark.benchmark import GetSize, get_image_paths, benchmark, GetA
 
 
 def test_get_size_benchmark():
-    libraries = ["opencv", "PIL"]
+    libraries = ["opencv", "PIL", "jpeg4py", "skimage"]
 
     benchmarks = [GetSize(), GetArray()]
 
