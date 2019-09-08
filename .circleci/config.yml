@@ -11,6 +11,7 @@ jobs:
         - run: black . --check
         - run: flake8 . --count --statistics
         - run: sudo pip install -e .
+        - run: sudo pip install pytest
         - run: pytest -v
 
 workflows:
