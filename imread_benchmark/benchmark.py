@@ -161,9 +161,12 @@ def main():
     if args.print_package_versions:
         print_package_versions()
 
-    benchmarks = [GetSize(), GetArray()]
+    benchmarks = [
+        # GetSize(),
+        GetArray()
+    ]
 
-    libraries = ["opencv", "PIL", "jpeg4py", "skimage", "imageio", "imageio"]
+    libraries = ["opencv", "PIL", "jpeg4py", "skimage", "imageio"]
 
     image_paths = get_image_paths(args.data_dir, args.num_images)
 
