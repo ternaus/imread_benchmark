@@ -8,9 +8,9 @@ jobs:
         - checkout
         - run: sudo pip install -r requirements.txt
         - run: python --version ; pip --version ; pwd ; ls
-#        - run: black . --check
-#        - run: flake8 . --count --statistics
-#        - run: sudo pip install -e .
+        - run: black . --check
+        - run: flake8 . --count --statistics
+        - run: sudo pip install -e .
         - run: pytest
 
 workflows:
