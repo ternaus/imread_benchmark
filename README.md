@@ -4,7 +4,19 @@
 # I/O benchmark
 I/O benchmark for different image processing python libraries.
 
+The code is inspired by the work of Alex Parinov:
+ 
+    https://github.com/albu/albumentations/blob/master/benchmark/benchmark.py
+    
+The idea is inspired by the work of Roman Soloviov:
+ 
+    https://www.kaggle.com/zfturbo/benchmark-2019-speed-of-image-reading
+
 # Installation
+```bash
+sudo apt install libturbojpeg
+```
+
 
 You can use pip to install `imread_benchmark`:
 
@@ -54,5 +66,8 @@ Extra options:
 
 # Libraries that are benchmarked:
 
-OpenCV
-PIL
+* OpenCV
+* pillow (PIL)
+* jpeg4py
+* scikit-image (skimage)
+* imageio
