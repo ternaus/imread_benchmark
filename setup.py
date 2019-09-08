@@ -11,7 +11,7 @@ URL = "https://github.com/ternaus/imread_benchmark"
 EMAIL = "iglovikov@gmail.com"
 AUTHOR = "Vladimir Iglovikov"
 REQUIRES_PYTHON = ">=3.0.0"
-VERSION = "0.0.3"
+VERSION = "0.0.4"
 
 here = os.path.abspath(os.path.dirname(__file__))
 
