@@ -65,22 +65,32 @@ class BenchmarkTest(ABC):
     def __str__(self):
         return self.__class__.__name__
 
-    def run(self, library, image_paths):
+    def run(self, library, image_paths: list):
         operation = getattr(self, library)
         for image in image_paths:
             operation(image)
 
 
 class GetSize(BenchmarkTest):
-    def PIL(self, image_path):
+    def PIL(self, image_path: str):
         width, height = Image.open(image_path).size
 
         return width, height
 
-    def opencv(self, image_path):
+    def opencv(self, image_path: str):
         image = cv2.imread(image_path)
         height, width = image.shape[:2]
         return width, height
+
+
+class GetArray(BenchmarkTest):
+    def PIL(self, image_path: str) -> np.array:
+        img = Image.open(image_path)
+        return img.convert("RGB")
+
+    def opencv(self, image_path: str) -> np.array:
+        img = cv2.imread(image_path)
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
 
 def parse_args():
@@ -132,10 +142,7 @@ def main():
     if args.print_package_versions:
         print_package_versions()
 
-    benchmarks = [
-        GetSize(),
-        # GetArray()
-    ]
+    benchmarks = [GetSize(), GetArray()]
 
     libraries = ["opencv", "PIL"]
 
