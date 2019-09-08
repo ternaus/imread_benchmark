@@ -4,6 +4,20 @@
 # I/O benchmark
 I/O benchmark for different image processing python libraries.
 
+# Installation
+
+You can use pip to install `imread_benchmark`:
+
+```bash
+pip install imread_benchmark
+```
+
+If you want to get the latest version of the code before it is released on PyPI you can install the library from GitHub:
+
+```bash
+pip install -U git+https://github.com/ternaus/imread_benchmark
+```
+
 # To calculate the I/O speed of your SSD/HDD in Linux
 
 ```bash

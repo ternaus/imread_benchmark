@@ -27,6 +27,7 @@ from tqdm import tqdm
 from timeit import Timer
 from abc import ABC
 from collections import defaultdict
+import random
 
 
 def print_package_versions():
@@ -38,18 +39,6 @@ def print_package_versions():
         except pkg_resources.DistributionNotFound:
             pass
     print(package_versions)
-
-
-def read_img_pillow(file_path: str):
-    with open(file_path, "rb") as f:
-        img = Image.open(f)
-    return img.convert("RGB")
-
-
-def read_img_cv2(file_path: str):
-    img = cv2.imread(file_path)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    return img
 
 
 def format_results(images_per_second_for_read, show_std=False):
@@ -72,7 +61,7 @@ class BenchmarkTest(ABC):
 
 
 class GetSize(BenchmarkTest):
-    def PIL(self, image_path: str):
+    def PIL(self, image_path: str) -> tuple:
         width, height = Image.open(image_path).size
 
         return width, height
@@ -86,11 +75,33 @@ class GetSize(BenchmarkTest):
 class GetArray(BenchmarkTest):
     def PIL(self, image_path: str) -> np.array:
         img = Image.open(image_path)
-        return img.convert("RGB")
+        img = img.convert("RGB")
+        return np.asarray(img)
 
     def opencv(self, image_path: str) -> np.array:
         img = cv2.imread(image_path)
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+
+def benchmark(libraries: list, benchmarks: list, image_paths: list, num_runs: int, shuffle: bool) -> defaultdict:
+    images_per_second = defaultdict(dict)
+    num_images = len(image_paths)
+
+    for library in libraries:
+        pbar = tqdm(total=len(benchmarks))
+        for benchmark in benchmarks:
+            pbar.set_description("Current benchmark: {} | {}".format(library, benchmark))
+            if shuffle:
+                random.shuffle(image_paths)
+            timer = Timer(lambda: benchmark.run(library, image_paths))
+            run_times = timer.repeat(number=1, repeat=num_runs)
+            benchmark_images_per_second = [1 / (run_time / num_images) for run_time in run_times]
+            images_per_second[library][str(benchmark)] = benchmark_images_per_second
+            pbar.update(1)
+
+        pbar.close()
+
+    return images_per_second
 
 
 def parse_args():
@@ -105,31 +116,14 @@ def parse_args():
         help="number of images for benchmarking (default: 2000)",
     )
     parser.add_argument(
-        "-r", "--runs", default=5, type=int, metavar="N", help="number of runs for each benchmark (default: 5)"
+        "-r", "--num_runs", default=5, type=int, metavar="N", help="number of runs for each benchmark (default: 5)"
     )
     parser.add_argument(
         "--show-std", dest="show_std", action="store_true", help="show standard deviation for benchmark runs"
     )
     parser.add_argument("-p", "--print-package-versions", action="store_true", help="print versions of packages")
+    parser.add_argument("-s", "--shuffle", action="store_true", help="Shuffle the list of images.")
     return parser.parse_args()
-
-
-def benchmark(libraries: list, benchmarks: list, image_paths: list, num_runs: int):
-    images_per_second = defaultdict(dict)
-    num_images = len(image_paths)
-
-    for library in libraries:
-        pbar = tqdm(total=len(benchmarks))
-        for benchmark in benchmarks:
-            timer = Timer(lambda: benchmark.run(library, image_paths))
-            run_times = timer.repeat(number=1, repeat=num_runs)
-            benchmark_images_per_second = [1 / (run_time / num_images) for run_time in run_times]
-        images_per_second[library][str(benchmark)] = benchmark_images_per_second
-        pbar.update(1)
-
-    pbar.close()
-
-    return images_per_second
 
 
 def get_image_paths(data_dir: (str, Path), num_images: int) -> list:
@@ -148,7 +142,7 @@ def main():
 
     image_paths = get_image_paths(args.data_dir, args.num_images)
 
-    images_per_second = benchmark(libraries, benchmarks, image_paths, args.num_runs)
+    images_per_second = benchmark(libraries, benchmarks, image_paths, args.num_runs, args.shuffle)
 
     pd.set_option("display.width", 1000)
     df = pd.DataFrame.from_dict(images_per_second)
