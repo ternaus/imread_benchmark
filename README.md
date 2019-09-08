@@ -4,13 +4,13 @@
 # I/O benchmark
 I/O benchmark for different image processing python libraries.
 
-The code is inspired by the work of Alex Parinov:
+The code is inspired by the benchmark code of [Alex Parinov](https://github.com/creafz) for the [albumentations](https://github.com/albu/albumentations) library.
  
-    https://github.com/albu/albumentations/blob/master/benchmark/benchmark.py
+[https://github.com/albu/albumentations/blob/master/benchmark/benchmark.py](https://github.com/albu/albumentations/blob/master/benchmark/benchmark.py])
     
-The idea is inspired by the work of Roman Soloviov:
+The idea is inspired by the work of [Roman Soloviov](https://github.com/zfturbo):
  
-    https://www.kaggle.com/zfturbo/benchmark-2019-speed-of-image-reading
+[https://www.kaggle.com/zfturbo/benchmark-2019-speed-of-image-reading](https://www.kaggle.com/zfturbo/benchmark-2019-speed-of-image-reading)
 
 # Installation
 ```bash
@@ -63,6 +63,7 @@ imread_benchmark -d <path to images> \
 Extra options:
 `-p` - to print benchmarked libraries versions
 `-s` - to shuffle images on every run   
+`--show-std` - to show standard deviation for measurements
 
 # Libraries that are benchmarked:
 
