@@ -10,28 +10,30 @@ imageio
 for cases:
 
 jpeg images => numpy array for RGB image
-
-The code is inspired by: https://github.com/albu/albumentations/blob/master/benchmark/benchmark.py
 """
 
-import numpy as np
-import cv2
-from PIL import Image
 import argparse
-import pkg_resources
-import sys
 import math
-from pathlib import Path
-import pandas as pd
-from tqdm import tqdm
-from timeit import Timer
+import random
+import sys
 from abc import ABC
 from collections import defaultdict
-import random
+from pathlib import Path
+from timeit import Timer
+
+import cv2
+import imageio
+import jpeg4py
+import numpy as np
+import pandas as pd
+import pkg_resources
+import skimage
+from PIL import Image
+from tqdm import tqdm
 
 
 def print_package_versions():
-    packages = ["opencv-python", "pillow"]
+    packages = ["opencv-python", "pillow", "jpeg4py", "scikit-image", "imageio"]
     package_versions = {"python": sys.version}
     for package in packages:
         try:
@@ -63,11 +65,25 @@ class BenchmarkTest(ABC):
 class GetSize(BenchmarkTest):
     def PIL(self, image_path: str) -> tuple:
         width, height = Image.open(image_path).size
-
         return width, height
 
     def opencv(self, image_path: str):
         image = cv2.imread(image_path)
+        height, width = image.shape[:2]
+        return width, height
+
+    def jpeg4py(self, image_path: str) -> np.array:
+        image = jpeg4py.JPEG(image_path).decode()
+        height, width = image.shape[:2]
+        return width, height
+
+    def skimage(self, image_path: str) -> np.asarray:
+        image = skimage.io.imread(image_path, plugin='matplotlib')
+        height, width = image.shape[:2]
+        return width, height
+
+    def imageio(self, image_path: str) -> np.array:
+        image = imageio.imread(image_path)
         height, width = image.shape[:2]
         return width, height
 
@@ -81,6 +97,15 @@ class GetArray(BenchmarkTest):
     def opencv(self, image_path: str) -> np.array:
         img = cv2.imread(image_path)
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    def jpeg4py(self, image_path: str) -> np.array:
+        return jpeg4py.JPEG(image_path).decode()
+
+    def skimage(self, image_path: str) -> np.array:
+        return skimage.io.imread(image_path, plugin='matplotlib')
+
+    def imageio(self, image_path: str) -> np.array:
+        return imageio.imread(image_path)
 
 
 def benchmark(libraries: list, benchmarks: list, image_paths: list, num_runs: int, shuffle: bool) -> defaultdict:
@@ -138,7 +163,7 @@ def main():
 
     benchmarks = [GetSize(), GetArray()]
 
-    libraries = ["opencv", "PIL"]
+    libraries = ["opencv", "PIL", "jpeg4py", "skimage", "imageio", "imageio"]
 
     image_paths = get_image_paths(args.data_dir, args.num_images)
 
