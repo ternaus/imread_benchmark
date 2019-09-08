@@ -10,7 +10,7 @@ jobs:
         - run: python --version ; pip --version ; pwd ; ls
         - run: black . --check
         - run: flake8 . --count --statistics
-        - run: pytest tests
+        - run: pytest
 
 
 workflows:
