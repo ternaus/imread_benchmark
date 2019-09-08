@@ -35,6 +35,24 @@ As a result you may expect something like:
  Timing buffered disk reads: 1062 MB in  3.00 seconds = 353.70 MB/sec
 ```
 
-# Libraries that are considered:
+# To run the benchmark
+To get the description of all input parameters
+```bash
+imread_benchmark -h
+```
 
-TODO => Automatic generation of this section
+
+```bash
+imread_benchmark -d <path to images> \
+                 -i <number of images to use> \
+                 -r <number of repeats>
+```
+
+Extra options:
+`-p` - to print benchmarked libraries versions
+`-s` - to shuffle images on every run   
+
+# Libraries that are benchmarked:
+
+OpenCV
+PIL
