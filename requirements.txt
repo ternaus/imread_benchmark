@@ -3,3 +3,5 @@ flake8
 pytest
 pillow
 opencv-python
+numpy
+pandas
