@@ -78,7 +78,7 @@ class GetSize(BenchmarkTest):
         return width, height
 
     def skimage(self, image_path: str) -> np.asarray:
-        image = skimage.io.imread(image_path, plugin='matplotlib')
+        image = skimage.io.imread(image_path, plugin="matplotlib")
         height, width = image.shape[:2]
         return width, height
 
@@ -102,7 +102,7 @@ class GetArray(BenchmarkTest):
         return jpeg4py.JPEG(image_path).decode()
 
     def skimage(self, image_path: str) -> np.array:
-        return skimage.io.imread(image_path, plugin='matplotlib')
+        return skimage.io.imread(image_path, plugin="matplotlib")
 
     def imageio(self, image_path: str) -> np.array:
         return imageio.imread(image_path)
