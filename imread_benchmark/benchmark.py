@@ -163,7 +163,8 @@ def main():
 
     benchmarks = [
         # GetSize(),
-        GetArray()]
+        GetArray()
+    ]
 
     libraries = ["opencv", "PIL", "jpeg4py", "skimage", "imageio"]
 
