@@ -11,7 +11,7 @@ jobs:
         - run: black . --check
         - run: flake8 . --count --statistics
         - run: sudo pip install -e .
-#        - run: pytest -v
+        - run: pytest -v
 
 workflows:
   version: 2
