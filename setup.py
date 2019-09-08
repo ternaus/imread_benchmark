@@ -7,11 +7,11 @@ from setuptools import setup, find_packages, Command
 # Package meta-data.
 NAME = "imread_benchmark"
 DESCRIPTION = "Benchmark for image reading for different libraries."
-URL = "https://github.com/ternaus/helper_functions"
+URL = "https://github.com/ternaus/imread_benchmark"
 EMAIL = "iglovikov@gmail.com"
 AUTHOR = "Vladimir Iglovikov"
 REQUIRES_PYTHON = ">=3.0.0"
-VERSION = "0.0.1"
+VERSION = "0.0.2"
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -90,7 +90,8 @@ setup(
     description=DESCRIPTION,
     long_description=get_long_description(),
     long_description_content_type="text/markdown",
-    author="Vladimir Iglovikov",
+    author=AUTHOR,
+    author_email=EMAIL,
     license="MIT",
     url=URL,
     packages=find_packages(exclude=["tests", "docs", "images"]),
@@ -107,4 +108,5 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
     cmdclass={"upload": UploadCommand},
+    entry_points={"console_scripts": ["imread_benchmark=imread_benchmark.benchmark:main"]},
 )
