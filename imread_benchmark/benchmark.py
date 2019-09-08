@@ -106,7 +106,7 @@ def benchmark(libraries: list, benchmarks: list, image_paths: list, num_runs: in
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Image reading libraries performance benchmark")
-    parser.add_argument("-d", "--data-dir", required=True, metavar="DIR", help="path to a directory with images")
+    parser.add_argument("-d", "--data-dir", metavar="DIR", help="path to a directory with images")
     parser.add_argument(
         "-i",
         "--num_images",
