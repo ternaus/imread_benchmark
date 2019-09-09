@@ -33,7 +33,7 @@ from tqdm import tqdm
 
 
 def print_package_versions():
-    packages = ["opencv-python", "pillow", "jpeg4py", "scikit-image", "imageio"]
+    packages = ["opencv-python", "pillow-simd", "jpeg4py", "scikit-image", "imageio"]
     package_versions = {"python": sys.version}
     for package in packages:
         try:

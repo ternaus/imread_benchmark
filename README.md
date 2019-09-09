@@ -68,7 +68,7 @@ Extra options:
 # Libraries that are benchmarked:
 
 * OpenCV
-* pillow (PIL)
+* pillow-simd (PIL-SIMD)
 * jpeg4py
 * scikit-image (skimage)
 * imageio
