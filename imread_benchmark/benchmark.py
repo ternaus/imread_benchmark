@@ -20,6 +20,7 @@ from abc import ABC
 from collections import defaultdict
 from pathlib import Path
 from timeit import Timer
+from typing import Union
 
 import cv2
 import imageio
@@ -27,13 +28,14 @@ import jpeg4py
 import numpy as np
 import pandas as pd
 import pkg_resources
+import pyvips
 import skimage
 from PIL import Image
 from tqdm import tqdm
 
 
 def print_package_versions():
-    packages = ["opencv-python", "pillow-simd", "jpeg4py", "scikit-image", "imageio"]
+    packages = ["opencv-python", "pillow-simd", "jpeg4py", "scikit-image", "imageio", "pyvips"]
     package_versions = {"python": sys.version}
     for package in packages:
         try:
@@ -87,6 +89,11 @@ class GetSize(BenchmarkTest):
         height, width = image.shape[:2]
         return width, height
 
+    def pyvips(self, image_path: str) -> np.array:
+        image = pyvips.Image.new_from_file(image_path, access="sequential")
+
+        return image.width, image.height
+
 
 class GetArray(BenchmarkTest):
     def PIL(self, image_path: str) -> np.array:
@@ -106,6 +113,14 @@ class GetArray(BenchmarkTest):
 
     def imageio(self, image_path: str) -> np.array:
         return imageio.imread(image_path)
+
+    def pyvips(self, image_path: str) -> np.array:
+        image = pyvips.Image.new_from_file(image_path, access="sequential")
+
+        memory_image = image.write_to_memory()
+        numpy_image = np.ndarray(buffer=memory_image, dtype=np.uint8, shape=[image.height, image.width, image.bands])
+
+        return numpy_image
 
 
 def benchmark(libraries: list, benchmarks: list, image_paths: list, num_runs: int, shuffle: bool) -> defaultdict:
@@ -151,7 +166,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_image_paths(data_dir: (str, Path), num_images: int) -> list:
+def get_image_paths(data_dir: Union[str, Path], num_images: int) -> list:
     image_paths = sorted(Path(data_dir).glob("*.*"))
     return [str(x) for x in image_paths[:num_images]]
 
@@ -166,7 +181,7 @@ def main():
         GetArray()
     ]
 
-    libraries = ["opencv", "PIL", "jpeg4py", "skimage", "imageio"]
+    libraries = ["opencv", "PIL", "jpeg4py", "skimage", "imageio", "pyvips"]
 
     image_paths = get_image_paths(args.data_dir, args.num_images)
 

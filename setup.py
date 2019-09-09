@@ -2,7 +2,8 @@ import io
 import os
 import sys
 from shutil import rmtree
-from setuptools import setup, find_packages, Command
+
+from setuptools import Command, find_packages, setup
 
 # Package meta-data.
 NAME = "imread_benchmark"
@@ -11,7 +12,7 @@ URL = "https://github.com/ternaus/imread_benchmark"
 EMAIL = "iglovikov@gmail.com"
 AUTHOR = "Vladimir Iglovikov"
 REQUIRES_PYTHON = ">=3.0.0"
-VERSION = "0.0.4"
+VERSION = "0.0.5"
 
 here = os.path.abspath(os.path.dirname(__file__))
 

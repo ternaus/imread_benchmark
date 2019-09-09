@@ -1,8 +1,8 @@
-from imread_benchmark.benchmark import GetSize, get_image_paths, benchmark, GetArray
+from imread_benchmark.benchmark import GetArray, GetSize, benchmark, get_image_paths  # NOQA
 
 
 def test_get_size_benchmark():
-    libraries = ["opencv", "PIL", "jpeg4py", "skimage"]
+    libraries = ["opencv", "PIL", "jpeg4py", "skimage", "imageio", "pyvips"]
 
     benchmarks = [GetSize(), GetArray()]
 
