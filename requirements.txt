@@ -1,12 +1,11 @@
 black
 flake8
 pytest
-pillow
+pillow-simd
 opencv-python
 numpy
 pandas
 tqdm
 jpeg4py
-pyvips
 scikit-image
 imageio
