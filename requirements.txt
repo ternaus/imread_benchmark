@@ -6,8 +6,8 @@ jpeg4py
 numpy
 opencv-python
 pandas
-pillow-simd
-pytest
+pillow
 pyvips
 scikit-image
+torchvision
 tqdm

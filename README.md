@@ -1,33 +1,12 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
- [![CircleCI](https://circleci.com/gh/ternaus/io_benchmark/tree/master.svg?style=svg)](https://circleci.com/gh/ternaus/io_benchmark/tree/master)
 
-# I/O benchmark
-I/O benchmark for different image processing python libraries.
-
-The code is inspired by the benchmark code of [Alex Parinov](https://github.com/creafz) for the [albumentations](https://github.com/albu/albumentations) library.
-
-[https://github.com/albu/albumentations/blob/master/benchmark/benchmark.py](https://github.com/albu/albumentations/blob/master/benchmark/benchmark.py])
-
-The idea is inspired by the work of [Roman Soloviov](https://github.com/zfturbo):
-
-[https://www.kaggle.com/zfturbo/benchmark-2019-speed-of-image-reading](https://www.kaggle.com/zfturbo/benchmark-2019-speed-of-image-reading)
 
 # Installation
-```bash
-sudo apt install libturbojpeg libvips-dev
-```
 
-
-You can use pip to install `imread_benchmark`:
+Requirements:
 
 ```bash
-pip install imread_benchmark
-```
-
-If you want to get the latest version of the code before it is released on PyPI you can install the library from GitHub:
-
-```bash
-pip install -U git+https://github.com/ternaus/imread_benchmark
+sudo apt install requirements.txt
 ```
 
 # To calculate the I/O speed of your SSD/HDD in Linux
@@ -37,6 +16,7 @@ sudo apt-get install hdparm
 
 sudo hdparm -Tt <disk_id>
 ```
+
 where `disk_id` is of the type `/dev/sda`
 
 As a result you may expect something like:
@@ -48,6 +28,7 @@ As a result you may expect something like:
 ```
 
 # To run the benchmark
+
 To get the description of all input parameters
 ```bash
 imread_benchmark -h
