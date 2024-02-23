@@ -1,13 +1,10 @@
-black
-flake8
 imageio
-isort
 jpeg4py
 numpy
 opencv-python
 pandas
 pillow
-pyvips
 scikit-image
 torchvision
 tqdm
+matplotlib
