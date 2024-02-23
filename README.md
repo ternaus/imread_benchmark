@@ -1,9 +1,14 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
 
-# Image Loading Benchmark: A Comparative Analysis
-This repository hosts the code and results of a comprehensive benchmark designed to evaluate the performance of various libraries in loading images. Inspired by the benchmarking approach used in the [Albumentations library](https://github.com/albumentations-team/albumentations/), this project aims to provide insights into optimizing image loading processes, especially in contexts where efficient data handling is critical for training neural networks on GPU.
+# Image Loading Benchmark: From JPG to RGB Numpy Arrays
 
-## Installation
+This repository presents a benchmark aimed at evaluating the efficiency of various libraries in loading JPG images and converting them into RGB numpy arrays. Inspired by similar work from the [Albumentations library](https://github.com/albumentations-team/albumentations/), this benchmark focuses on a critical step in preparing data for neural network training, particularly when utilizing GPUs for computation.
+
+## Important Note on Image Conversion
+
+During the benchmark, it's essential to acknowledge that certain libraries, namely OpenCV, torchvision, and TensorFlow, inherently load images in formats other than RGB (e.g., BGR for OpenCV and tensors for torchvision and TensorFlow). This necessitates an additional conversion step to standardize the images as RGB numpy arrays for a fair comparison. While this conversion introduces extra overhead, preliminary analysis indicates that it does not significantly alter the overall performance rankings among the libraries. The benchmark thus provides a realistic view of the end-to-end image loading and preprocessing time that one can expect in practical scenarios.
+
+## Installation and Setup
 Before running the benchmark, ensure your system is equipped with the necessary dependencies. Start by installing `libturbojpeg`:
 
 ```bash
@@ -18,7 +23,7 @@ sudo apt install requirements.txt
 
 ## Measuring I/O Speed
 
-Understanding the I/O speed of your storage device is crucial for interpreting the benchmark results accurately. Use hdparm to measure the I/O speed of your SSD/HDD:
+Before diving into the image loading benchmark, it's beneficial to measure the I/O speed of your storage system:
 
 ```bash
 sudo apt-get install hdparm

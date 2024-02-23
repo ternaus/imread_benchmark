@@ -1,29 +1,26 @@
 import argparse
-import contextlib
-import math
+import logging
+import os
 import random
 import sys
+import time
 from abc import ABC
 from collections import defaultdict
-from pathlib import Path
-from timeit import Timer
 from contextlib import suppress
+from pathlib import Path
 
 import cv2
 import imageio.v2 as imageio
-import os
-from pytablewriter import MarkdownTableWriter
-from pytablewriter.style import Style
-import time
 import jpeg4py
 import numpy as np
 import pandas as pd
 import pkg_resources
 import skimage
+import tensorflow as tf
 import torchvision
 from PIL import Image
-from tqdm import tqdm
-import tensorflow as tf
+from pytablewriter import MarkdownTableWriter
+from pytablewriter.style import Style
 
 cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
@@ -33,17 +30,24 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
-os.environ["export CUDA_VISIBLE_DEVICES"] = ""
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 try:
-    # Disable all GPUS
-    tf.config.set_visible_devices([], 'GPU')
+    # Attempt to disable all GPUs
+    tf.config.set_visible_devices([], "GPU")
     visible_devices = tf.config.get_visible_devices()
     for device in visible_devices:
-        assert device.device_type != 'GPU'
-except:
-    # Invalid device or cannot modify virtual devices once initialized.
-    pass
+        if device.device_type == "GPU":
+            logger.warning("GPU device is still visible, disabling failed.")
+except tf.errors.NotFoundError:  # Example of catching a more specific TensorFlow exception
+    logger.exception("Specific TensorFlow error encountered when trying to modify GPU visibility.")
+except Exception:  # Use this as a fallback if you're unsure which specific exceptions might be raised
+    logger.exception("Failed to modify GPU visibility due to an unexpected error.")
+
 
 def get_package_versions():
     packages = ["opencv-python", "pillow", "jpeg4py", "scikit-image", "imageio", "torchvision", "tensorflow"]
@@ -52,7 +56,6 @@ def get_package_versions():
         with suppress(pkg_resources.DistributionNotFound):
             package_versions[package] = pkg_resources.get_distribution(package).version
     return package_versions
-
 
 
 class BenchmarkTest(ABC):
@@ -73,8 +76,7 @@ class GetArray(BenchmarkTest):
 
     def opencv(self, image_path: str) -> np.array:
         img = cv2.imread(image_path)
-        return img
-        # return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     def jpeg4py(self, image_path: str) -> np.array:
         return jpeg4py.JPEG(image_path).decode()
@@ -95,8 +97,7 @@ class GetArray(BenchmarkTest):
         # Decode the image to tensor
         image = tf.io.decode_image(image_string, channels=3)
         # Convert the tensor to numpy array
-        image_np = image.numpy()
-        return image_np
+        return image.numpy()
 
 
 class MarkdownGenerator:
@@ -104,36 +105,39 @@ class MarkdownGenerator:
         self._df = df
         self._package_versions = package_versions
 
-    def _highlight_best_result(self, results):
-        best_result = float("-inf")
-        for result in results:
-            try:
-                result = int(result)
-            except ValueError:
-                continue
-            if result > best_result:
-                best_result = result
-        return [f"**{r}**" if r == str(best_result) else r for r in results]
+    def _highlight_best_result(self, results) -> list[str]:
+        # Convert all results to floats for comparison, filtering out any non-numeric values beforehand
+        numeric_results = [float(r) for r in results if r.replace(".", "", 1).isdigit()]
 
-    def _make_headers(self):
+        if not numeric_results:
+            return results  # Return the original results if no numeric values were found
+
+        best_result = max(numeric_results)
+
+        # Highlight the best result by comparing the float representation of each result
+        return [f"**{r}**" if float(r) == best_result else r for r in results]
+
+    def _make_headers(self) -> list[str]:
         libraries = self._df.columns.to_list()
         columns = []
         for library in libraries:
-            version = self._package_versions[library.replace("opencv", "opencv-python").replace("pil", "pillow").replace("skimage", "scikit-image")]
+            version = self._package_versions[
+                library.replace("opencv", "opencv-python").replace("pil", "pillow").replace("skimage", "scikit-image")
+            ]
 
             columns.append(f"{library}<br><small>{version}</small>")
         return ["", *columns]
 
-    def _make_value_matrix(self):
+    def _make_value_matrix(self) -> list[list]:
         index = self._df.index.tolist()
-        values = self._df.values.tolist()
+        values = self._df.to_numpy().tolist()
         value_matrix = []
-        for transform, results in zip(index, values):
+        for transform, results in zip(index, values, strict=False):
             row = [transform, *self._highlight_best_result(results)]
             value_matrix.append(row)
         return value_matrix
 
-    def _make_versions_text(self):
+    def _make_versions_text(self) -> str:
         libraries = ["Python", "numpy", "pillow", "opencv-python", "scikit-image", "scipy", "tensorflow"]
         libraries_with_versions = [
             "{library} {version}".format(library=library, version=self._package_versions[library].replace("\n", ""))
@@ -149,45 +153,56 @@ class MarkdownGenerator:
         writer.write_table()
 
 
+def run_single_benchmark(benchmark, library, image_paths):
+    """
+    Runs a single benchmark for a given library and set of image paths.
+    Returns the images per second performance.
+    """
+    start_time = time.perf_counter()
+    benchmark.run(library, image_paths)
+    end_time = time.perf_counter()
 
-def benchmark(libraries: list, benchmarks: list, image_paths: list, num_runs: int, shuffle_paths: bool, warmup_runs: int = 1) -> defaultdict:
-    images_per_second = defaultdict(lambda: defaultdict(list))
-    num_images = len(image_paths)
+    run_time = end_time - start_time
+    return len(image_paths) / run_time
 
-    # Warm-up phase for each library
-    for library in tqdm(libraries, desc='Warm-up', leave=False):
+
+def warm_up(libraries, benchmarks, image_paths, warmup_runs, shuffle_paths):
+    """
+    Performs warm-up runs for each library to ensure fair timing.
+    """
+    for library in libraries:
         for _ in range(warmup_runs):
             for benchmark in benchmarks:
                 if shuffle_paths:
                     random.shuffle(image_paths)
                 benchmark.run(library, image_paths)
 
-    # Main benchmarking loop
-    for _ in tqdm(range(num_runs), desc='Benchmark Runs'):
+
+def perform_benchmark(libraries, benchmarks, image_paths, num_runs, shuffle_paths):
+    """
+    Main benchmarking logic, performing the benchmark for each library and benchmark combination.
+    """
+    images_per_second = defaultdict(lambda: defaultdict(list))
+
+    for _ in range(num_runs):
         shuffled_libraries = libraries.copy()
         random.shuffle(shuffled_libraries)  # Shuffle library order for each run
 
-        for library in tqdm(shuffled_libraries, desc='Libraries', leave=False):
-            for benchmark in tqdm(benchmarks, desc=f'{library} Benchmarks', leave=False):
+        for library in shuffled_libraries:
+            for benchmark in benchmarks:
                 if shuffle_paths:
                     random.shuffle(image_paths)
 
-                # Start timer
-                start_time = time.perf_counter()
+                ips = run_single_benchmark(benchmark, library, image_paths)
+                images_per_second[library][str(benchmark)].append(ips)
 
-                # Run benchmark
-                benchmark.run(library, image_paths)
-
-                # End timer
-                end_time = time.perf_counter()
-
-                run_time = end_time - start_time
-                images_per_second_per_run = num_images / run_time
-
-                images_per_second[library][str(benchmark)].append(images_per_second_per_run)
+    return images_per_second
 
 
-    # Calculate average and std deviation
+def calculate_results(images_per_second):
+    """
+    Calculates the average and standard deviation of images per second for each library and benchmark.
+    """
     final_results = defaultdict(dict)
     for library, benchmarks in images_per_second.items():
         for benchmark, times in benchmarks.items():
@@ -195,9 +210,28 @@ def benchmark(libraries: list, benchmarks: list, image_paths: list, num_runs: in
             std_ips = np.std(times) if len(times) > 1 else 0
             final_results[library][benchmark] = f"{avg_ips:.2f} ± {std_ips:.2f}"
 
-
     return final_results
 
+
+def benchmark(
+    libraries: list,
+    benchmarks: list,
+    image_paths: list,
+    num_runs: int,
+    shuffle_paths: bool,
+    warmup_runs: int = 1,
+) -> defaultdict:
+    """
+    Orchestrates the benchmarking process, including warm-up, main benchmark, and result calculation.
+    """
+    # Warm-up phase
+    warm_up(libraries, benchmarks, image_paths, warmup_runs, shuffle_paths)
+
+    # Main benchmarking
+    images_per_second = perform_benchmark(libraries, benchmarks, image_paths, num_runs, shuffle_paths)
+
+    # Calculate and return final results
+    return calculate_results(images_per_second)
 
 
 def parse_args():
