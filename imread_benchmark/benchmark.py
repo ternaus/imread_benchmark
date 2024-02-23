@@ -143,7 +143,7 @@ class MarkdownGenerator:
             "{library} {version}".format(library=library, version=self._package_versions[library].replace("\n", ""))
             for library in libraries
         ]
-        return "Python and library versions: {}.".format(", ".join(libraries_with_versions))
+        return f'Python and library versions: {", ".join(libraries_with_versions)}.'
 
     def print(self) -> None:
         writer = MarkdownTableWriter()
