@@ -1,14 +1,18 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 # Image Loading Benchmark: From JPG to RGB Numpy Arrays
 
-This repository presents a benchmark aimed at evaluating the efficiency of various libraries in loading JPG images and converting them into RGB numpy arrays. Inspired by similar work from the [Albumentations library](https://github.com/albumentations-team/albumentations/), this benchmark focuses on a critical step in preparing data for neural network training, particularly when utilizing GPUs for computation.
+![Benchmark-2024-02-26](images/2024-02-26.png)
+
+This benchmark evaluates the efficiency of different libraries in loading JPG images and converting them into RGB numpy arrays, essential for neural network training data preparation. Inspired by the [Albumentations library](https://github.com/albumentations-team/albumentations/).
 
 ## Important Note on Image Conversion
 
-During the benchmark, it's essential to acknowledge that certain libraries, namely OpenCV, torchvision, and TensorFlow, inherently load images in formats other than RGB (e.g., BGR for OpenCV and tensors for torchvision and TensorFlow). This necessitates an additional conversion step to standardize the images as RGB numpy arrays for a fair comparison. While this conversion introduces extra overhead, preliminary analysis indicates that it does not significantly alter the overall performance rankings among the libraries. The benchmark thus provides a realistic view of the end-to-end image loading and preprocessing time that one can expect in practical scenarios.
+In the benchmark, it's crucial to standardize image formats for a fair comparison, despite different default formats used by OpenCV (BGR), torchvision, and TensorFlow (tensors). A conversion step to RGB numpy arrays is included for consistency. Note that in typical use cases, torchvision and TensorFlow do not require this conversion. Preliminary analysis shows that this extra step does not significantly impact the comparative performance of the libraries, ensuring that the benchmark accurately reflects realistic end-to-end image loading and preprocessing times.
 
 ## Installation and Setup
+
 Before running the benchmark, ensure your system is equipped with the necessary dependencies. Start by installing `libturbojpeg`:
 
 ```bash
@@ -91,15 +95,16 @@ Extra options:
 
 ### Hardware and Software Specifications
 
-- **CPU**: AMD Ryzen Threadripper 3970X 32-Core Processor
-- **Library Versions**:
-  - skimage: 0.22.0
-  - imageio: 2.34.0
-  - opencv: 4.9.0.80
-  - PIL (pillow): 10.2.0
-  - jpeg4py: 0.1.4
-  - torchvision: 0.17.1
-  - tensorflow: 2.15.0.post1
+**CPU**: AMD Ryzen Threadripper 3970X 32-Core Processor
+**Library Versions**:
+
+- skimage: 0.22.0
+- imageio: 2.34.0
+- opencv: 4.9.0.80
+- PIL (pillow): 10.2.0
+- jpeg4py: 0.1.4
+- torchvision: 0.17.1
+- tensorflow: 2.15.0.post1
 
 ### Disk Models
 
