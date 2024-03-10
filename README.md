@@ -19,6 +19,12 @@ Before running the benchmark, ensure your system is equipped with the necessary 
 sudo apt-get install libturbojpeg
 ```
 
+or in OSX:
+
+```bash
+brew install jpeg-turbo
+```
+
 Next, install all required Python libraries listed in `requirements.txt`:
 
 ```bash
@@ -90,6 +96,7 @@ Extra options:
 * imageio
 * torchvision
 * tensorflow
+* kornia-rs
 
 ## Image Loading Benchmark Results
 

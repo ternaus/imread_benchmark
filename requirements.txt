@@ -1,10 +1,13 @@
 imageio
 jpeg4py
+kornia-rs
+matplotlib
 numpy
 opencv-python
 pandas
 pillow
+pytablewriter
 scikit-image
+tensorflow
 torchvision
 tqdm
-matplotlib

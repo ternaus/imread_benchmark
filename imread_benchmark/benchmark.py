@@ -12,6 +12,7 @@ from pathlib import Path
 import cv2
 import imageio.v2 as imageio
 import jpeg4py
+import kornia_rs as K
 import numpy as np
 import pandas as pd
 import pkg_resources
@@ -21,6 +22,7 @@ import torchvision
 from PIL import Image
 from pytablewriter import MarkdownTableWriter
 from pytablewriter.style import Style
+from tqdm import tqdm
 
 cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
@@ -50,7 +52,16 @@ except Exception:  # Use this as a fallback if you're unsure which specific exce
 
 
 def get_package_versions():
-    packages = ["opencv-python", "pillow", "jpeg4py", "scikit-image", "imageio", "torchvision", "tensorflow"]
+    packages = [
+        "opencv-python",
+        "pillow",
+        "jpeg4py",
+        "scikit-image",
+        "imageio",
+        "torchvision",
+        "tensorflow",
+        "kornia-rs",
+    ]
     package_versions = {"Python": sys.version}
     for package in packages:
         with suppress(pkg_resources.DistributionNotFound):
@@ -99,6 +110,9 @@ class GetArray(BenchmarkTest):
         # Convert the tensor to numpy array
         return image.numpy()
 
+    def kornia(self, image_path: str) -> np.array:
+        return K.read_image_jpeg(image_path)
+
 
 class MarkdownGenerator:
     def __init__(self, df, package_versions):
@@ -122,7 +136,12 @@ class MarkdownGenerator:
         columns = []
         for library in libraries:
             version = self._package_versions[
-                library.replace("opencv", "opencv-python").replace("pil", "pillow").replace("skimage", "scikit-image")
+                (
+                    library.replace("opencv", "opencv-python")
+                    .replace("pil", "pillow")
+                    .replace("skimage", "scikit-image")
+                    .replace("kornia", "kornia-rs")
+                )
             ]
 
             columns.append(f"{library}<br><small>{version}</small>")
@@ -138,7 +157,7 @@ class MarkdownGenerator:
         return value_matrix
 
     def _make_versions_text(self) -> str:
-        libraries = ["Python", "numpy", "pillow", "opencv-python", "scikit-image", "scipy", "tensorflow"]
+        libraries = ["Python", "numpy", "pillow", "opencv-python", "scikit-image", "scipy", "tensorflow", "kornia-rs"]
         libraries_with_versions = [
             "{library} {version}".format(library=library, version=self._package_versions[library].replace("\n", ""))
             for library in libraries
@@ -170,8 +189,8 @@ def warm_up(libraries, benchmarks, image_paths, warmup_runs, shuffle_paths):
     """
     Performs warm-up runs for each library to ensure fair timing.
     """
-    for library in libraries:
-        for _ in range(warmup_runs):
+    for library in tqdm(libraries, desc="Warming up libraries"):
+        for _ in tqdm(range(warmup_runs), desc=f"Warm-up runs for {library}"):
             for benchmark in benchmarks:
                 if shuffle_paths:
                     random.shuffle(image_paths)
@@ -184,11 +203,13 @@ def perform_benchmark(libraries, benchmarks, image_paths, num_runs, shuffle_path
     """
     images_per_second = defaultdict(lambda: defaultdict(list))
 
-    for _ in range(num_runs):
+    # for _ in range(num_runs):
+    for _ in tqdm(range(num_runs), desc="Benchmarking Runs"):
         shuffled_libraries = libraries.copy()
         random.shuffle(shuffled_libraries)  # Shuffle library order for each run
 
-        for library in shuffled_libraries:
+        for library in tqdm(shuffled_libraries, desc="Libraries"):
+            # for library in shuffled_libraries:
             for benchmark in benchmarks:
                 if shuffle_paths:
                     random.shuffle(image_paths)
@@ -278,7 +299,7 @@ def main() -> None:
         GetArray(),
     ]
 
-    libraries = ["skimage", "imageio", "opencv", "pil", "jpeg4py", "torchvision", "tensorflow"]
+    libraries = ["skimage", "imageio", "opencv", "pil", "jpeg4py", "torchvision", "tensorflow", "kornia"]
 
     image_paths = get_image_paths(args.data_dir, args.num_images)
 
