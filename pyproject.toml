@@ -82,7 +82,7 @@ target-version = "py310"
 explicit-preview-rules = true
 
 select = ["F", "E", "W", "C90", "I", "N", "D", "UP", "YTT", "ANN", "ASYNC", "TRIO", "S", "BLE", "FBT", "B", "A", "COM", "CPY", "C4", "DTZ", "T10", "DJ", "EM", "EXE", "ISC", "ICN", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "INT", "ARG", "PTH", "TD", "FIX", "ERA", "PD", "PGH", "PL", "TRY", "FLY", "NPY", "PERF", "FURB", "LOG", "RUF"]
-ignore = ["ANN101", "PD901", "ANN204", "D212", "D203", "D102", "D100", "D103", "ANN201", "FBT002", "B024", "ANN001", "D101", "D105", "FBT001", "B023", "ISC001", "D104", "PLR0913", "D107", "D200", "D205", "D401" ]
+ignore = ["ANN101", "PD901", "ANN204", "D212", "D203", "D102", "D100", "D103", "ANN201", "FBT002", "B024", "ANN001", "D101", "D105", "FBT001", "B023", "ISC001", "D104", "PLR0913", "D107", "D200", "D205", "D401", "N812", "COM812", "PERF203", "T201" ]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
