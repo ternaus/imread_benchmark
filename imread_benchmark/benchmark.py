@@ -6,7 +6,6 @@ import sys
 import time
 from abc import ABC
 from collections import defaultdict
-from contextlib import suppress
 from pathlib import Path
 
 import cv2
@@ -52,21 +51,25 @@ except Exception:  # Use this as a fallback if you're unsure which specific exce
 
 
 def get_package_versions():
-    packages = [
-        "opencv-python",
-        "pillow",
-        "jpeg4py",
-        "scikit-image",
-        "imageio",
-        "torchvision",
-        "tensorflow",
-        "kornia-rs",
-    ]
-    package_versions = {"Python": sys.version}
-    for package in packages:
-        with suppress(pkg_resources.DistributionNotFound):
-            package_versions[package] = pkg_resources.get_distribution(package).version
-    return package_versions
+    # Mapping of import names to package names as they might differ
+    package_mapping = {
+        "opencv": "opencv-python-headless",  # or "opencv-python" depending on which you use
+        "pil": "pillow",
+        "jpeg4py": "jpeg4py",
+        "skimage": "scikit-image",
+        "imageio": "imageio",
+        "torchvision": "torchvision",
+        "tensorflow": "tensorflow",
+        "kornia": "kornia-rs",
+    }
+
+    versions = {"Python": sys.version.split()[0]}  # Just get the major.minor.patch
+    for package, dist_name in package_mapping.items():
+        try:
+            versions[package] = pkg_resources.get_distribution(dist_name).version
+        except pkg_resources.DistributionNotFound:
+            versions[package] = "Not Installed"
+    return versions
 
 
 class BenchmarkTest(ABC):
@@ -137,7 +140,7 @@ class MarkdownGenerator:
         for library in libraries:
             version = self._package_versions[
                 (
-                    library.replace("opencv", "opencv-python")
+                    library.replace("opencv", "opencv-python-headless")
                     .replace("pil", "pillow")
                     .replace("skimage", "scikit-image")
                     .replace("kornia", "kornia-rs")
@@ -157,7 +160,16 @@ class MarkdownGenerator:
         return value_matrix
 
     def _make_versions_text(self) -> str:
-        libraries = ["Python", "numpy", "pillow", "opencv-python", "scikit-image", "scipy", "tensorflow", "kornia-rs"]
+        libraries = [
+            "Python",
+            "numpy",
+            "pillow",
+            "opencv-python-headless",
+            "scikit-image",
+            "scipy",
+            "tensorflow",
+            "kornia-rs",
+        ]
         libraries_with_versions = [
             "{library} {version}".format(library=library, version=self._package_versions[library].replace("\n", ""))
             for library in libraries
@@ -283,6 +295,7 @@ def parse_args():
     parser.add_argument("-m", "--markdown", action="store_true", help="print benchmarking results as a markdown table")
     parser.add_argument("-p", "--print-package-versions", action="store_true", help="print versions of packages")
     parser.add_argument("-s", "--shuffle", action="store_true", help="Shuffle the list of images.")
+    parser.add_argument("-o", "--output_path", type=Path, help="Path to save resulting dataframe.")
     return parser.parse_args()
 
 
@@ -295,24 +308,31 @@ def main() -> None:
     args = parse_args()
     package_versions = get_package_versions()
 
-    benchmarks = [
-        GetArray(),
-    ]
-
-    libraries = ["skimage", "imageio", "opencv", "pil", "jpeg4py", "torchvision", "tensorflow", "kornia"]
+    benchmarks = [GetArray()]  # Add more benchmark classes as needed
+    libraries = ["skimage", "imageio", "opencv", "pil", "jpeg4py", "torchvision", "tensorflow", "kornia-rs"]
 
     image_paths = get_image_paths(args.data_dir, args.num_images)
-
     images_per_second = benchmark(libraries, benchmarks, image_paths, args.num_runs, args.shuffle)
 
-    pd.set_option("display.width", 1000)
-    df = pd.DataFrame.from_dict(images_per_second)
-    df = df[libraries]
+    # Convert the results to a DataFrame
+    results = defaultdict(list)
+    for library in libraries:
+        for perf in images_per_second[library].values():
+            results["Library"].append(library)
+            results["Version"].append(package_versions.get(library, "Unknown"))
+            results["Performance (images/sec)"].append(perf)
+
+    df = pd.DataFrame(results)
+
+    if args.output_path:
+        df.to_csv(args.output_path, index=False)
 
     if args.markdown:
-        makedown_generator = MarkdownGenerator(df, package_versions)
-        makedown_generator.print()
+        # Convert dataframe to markdown table
+        print(df.to_markdown())
+
+    return df  # Return the dataframe if needed
 
 
 if __name__ == "__main__":
-    main()
+    df = main()
