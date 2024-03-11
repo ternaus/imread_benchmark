@@ -1,0 +1,17 @@
+-f https://download.pytorch.org/whl/torch_stable.html
+
+imageio
+jpeg4py
+kornia-rs
+matplotlib
+numpy
+opencv-python-headless
+pandas
+pillow
+pytablewriter
+scikit-image
+tensorflow
+torchvision
+tqdm
+tabulate
+seaborn
