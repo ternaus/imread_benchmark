@@ -187,7 +187,8 @@ class MarkdownGenerator:
 
 
 def run_single_benchmark(benchmark, library, image_paths):
-    """Runs a single benchmark for a given library and set of image paths.
+    """
+    Runs a single benchmark for a given library and set of image paths.
     Returns the images per second performance.
     """
     start_time = time.perf_counter()
