@@ -50,18 +50,20 @@ except Exception:  # Use this as a fallback if you're unsure which specific exce
     logger.exception("Failed to modify GPU visibility due to an unexpected error.")
 
 
+package_mapping = {
+    "opencv": "opencv-python-headless",  # or "opencv-python" depending on which you use
+    "pil": "pillow",
+    "jpeg4py": "jpeg4py",
+    "skimage": "scikit-image",
+    "imageio": "imageio",
+    "torchvision": "torchvision",
+    "tensorflow": "tensorflow",
+    "kornia": "kornia-rs",
+}
+
+
 def get_package_versions():
     # Mapping of import names to package names as they might differ
-    package_mapping = {
-        "opencv": "opencv-python-headless",  # or "opencv-python" depending on which you use
-        "pil": "pillow",
-        "jpeg4py": "jpeg4py",
-        "skimage": "scikit-image",
-        "imageio": "imageio",
-        "torchvision": "torchvision",
-        "tensorflow": "tensorflow",
-        "kornia": "kornia-rs",
-    }
 
     versions = {"Python": sys.version.split()[0]}  # Just get the major.minor.patch
     for package, dist_name in package_mapping.items():
@@ -198,9 +200,7 @@ def run_single_benchmark(benchmark, library, image_paths):
 
 
 def warm_up(libraries, benchmarks, image_paths, warmup_runs, shuffle_paths):
-    """
-    Performs warm-up runs for each library to ensure fair timing.
-    """
+    """Performs warm-up runs for each library to ensure fair timing."""
     for library in tqdm(libraries, desc="Warming up libraries"):
         for _ in tqdm(range(warmup_runs), desc=f"Warm-up runs for {library}"):
             for benchmark in benchmarks:
@@ -210,9 +210,7 @@ def warm_up(libraries, benchmarks, image_paths, warmup_runs, shuffle_paths):
 
 
 def perform_benchmark(libraries, benchmarks, image_paths, num_runs, shuffle_paths):
-    """
-    Main benchmarking logic, performing the benchmark for each library and benchmark combination.
-    """
+    """Main benchmarking logic, performing the benchmark for each library and benchmark combination."""
     images_per_second = defaultdict(lambda: defaultdict(list))
 
     # for _ in range(num_runs):
@@ -233,9 +231,7 @@ def perform_benchmark(libraries, benchmarks, image_paths, num_runs, shuffle_path
 
 
 def calculate_results(images_per_second):
-    """
-    Calculates the average and standard deviation of images per second for each library and benchmark.
-    """
+    """Calculates the average and standard deviation of images per second for each library and benchmark."""
     final_results = defaultdict(dict)
     for library, benchmarks in images_per_second.items():
         for benchmark, times in benchmarks.items():
@@ -254,9 +250,7 @@ def benchmark(
     shuffle_paths: bool,
     warmup_runs: int = 1,
 ) -> defaultdict:
-    """
-    Orchestrates the benchmarking process, including warm-up, main benchmark, and result calculation.
-    """
+    """Orchestrates the benchmarking process, including warm-up, main benchmark, and result calculation."""
     # Warm-up phase
     warm_up(libraries, benchmarks, image_paths, warmup_runs, shuffle_paths)
 
@@ -309,7 +303,7 @@ def main() -> None:
     package_versions = get_package_versions()
 
     benchmarks = [GetArray()]  # Add more benchmark classes as needed
-    libraries = ["skimage", "imageio", "opencv", "pil", "jpeg4py", "torchvision", "tensorflow", "kornia-rs"]
+    libraries = ["skimage", "imageio", "opencv", "pil", "jpeg4py", "torchvision", "tensorflow", "kornia"]
 
     image_paths = get_image_paths(args.data_dir, args.num_images)
     images_per_second = benchmark(libraries, benchmarks, image_paths, args.num_runs, args.shuffle)
@@ -318,7 +312,7 @@ def main() -> None:
     results = defaultdict(list)
     for library in libraries:
         for perf in images_per_second[library].values():
-            results["Library"].append(library)
+            results["Library"].append(package_mapping[library])
             results["Version"].append(package_versions.get(library, "Unknown"))
             results["Performance (images/sec)"].append(perf)
 

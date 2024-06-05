@@ -3,7 +3,7 @@
 
 # Image Loading Benchmark: From JPG to RGB Numpy Arrays
 
-![Benchmark-2024-03-11](images/2024-03-11.png)
+![Benchmark-2024-06-05](images/2024-06-05.png)
 
 This benchmark evaluates the efficiency of different libraries in loading JPG images and converting them into RGB numpy arrays, essential for neural network training data preparation. Inspired by the [Albumentations library](https://github.com/albumentations-team/albumentations/).
 
@@ -89,13 +89,13 @@ Extra options:
 
 ## Results
 
-|    | Library     | Version        | Performance (images/sec)   |
-|---:|:------------|:---------------|:---------------------------|
-|  0 | skimage     | 0.22.0         | 539.93 ± 7.68              |
-|  1 | imageio     | 2.34.0         | 531.24 ± 10.10             |
-|  2 | opencv      | 4.9.0.80       | 354.63 ± 0.54              |
-|  3 | pil         | 10.2.0         | 589.74 ± 14.64             |
-|  4 | jpeg4py     | 0.1.4          | 701.98 ± 0.79              |
-|  5 | torchvision | 0.17.1+rocm5.7 | 662.68 ± 1.66              |
-|  6 | tensorflow  | 2.16.1         | 703.24 ± 0.63              |
-|  7 | kornia      | 0.1.1          | 685.13 ± 1.29              |
+|    | Library                | Version   | Performance (images/sec)   |
+|---:|:-----------------------|:----------|:---------------------------|
+|  0 | scikit-image           | 0.23.2    | 538.48 ± 6.86              |
+|  1 | imageio                | 2.34.1    | 538.58 ± 6.84              |
+|  2 | opencv-python-headless | 4.10.0.82 | 631.46 ± 0.43              |
+|  3 | pillow                 | 10.3.0    | 589.56 ± 8.79              |
+|  4 | jpeg4py                | 0.1.4     | 700.60 ± 0.88              |
+|  5 | torchvision            | 0.18.1    | 658.68 ± 0.78              |
+|  6 | tensorflow             | 2.16.1    | 704.43 ± 1.10              |
+|  7 | kornia-rs              | 0.1.1     | 682.95 ± 1.21              |
