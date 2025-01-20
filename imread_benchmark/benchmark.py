@@ -176,7 +176,7 @@ class MarkdownGenerator:
             "{library} {version}".format(library=library, version=self._package_versions[library].replace("\n", ""))
             for library in libraries
         ]
-        return f'Python and library versions: {", ".join(libraries_with_versions)}.'
+        return f"Python and library versions: {', '.join(libraries_with_versions)}."
 
     def print(self) -> None:
         writer = MarkdownTableWriter()
@@ -289,7 +289,7 @@ def parse_args():
     parser.add_argument("-m", "--markdown", action="store_true", help="print benchmarking results as a markdown table")
     parser.add_argument("-p", "--print-package-versions", action="store_true", help="print versions of packages")
     parser.add_argument("-s", "--shuffle", action="store_true", help="Shuffle the list of images.")
-    parser.add_argument("-o", "--output_path", type=Path, help="Path to save resulting dataframe.")
+    parser.add_argument("-o", "--output_path", type=Path, help="Path to save resulting dataframe.", default="output")
     return parser.parse_args()
 
 
@@ -300,6 +300,9 @@ def get_image_paths(data_dir: str | Path, num_images: int) -> list:
 
 def main() -> None:
     args = parse_args()
+
+    Path(args.output_path).mkdir(parents=True, exist_ok=True)
+
     package_versions = get_package_versions()
 
     benchmarks = [GetArray()]  # Add more benchmark classes as needed
