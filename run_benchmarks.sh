@@ -66,7 +66,14 @@ LIBRARIES=("opencv" "pillow" "jpeg4py" "skimage" "imageio" "torchvision" "tensor
 setup_venv() {
     local lib=$1
     echo "Setting up environment for $lib..."
-    python -m venv "$VENV_DIR/$lib"
+
+    # Get the full path to the current Python interpreter
+    PYTHON_PATH=$(which python)
+    echo "Using Python: $PYTHON_PATH"
+    echo "Python version: $($PYTHON_PATH --version)"
+
+    # Create venv with the same Python version
+    $PYTHON_PATH -m venv "$VENV_DIR/$lib" --clear
 
     # Activate virtual environment (works on both Unix and Windows)
     if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
@@ -75,9 +82,16 @@ setup_venv() {
         source "$VENV_DIR/$lib/bin/activate"
     fi
 
-    pip install uv
+    # Upgrade pip first using the correct Python
+    $PYTHON_PATH -m pip install --upgrade pip
 
-    # Install requirements
+    # Install uv using the correct Python
+    $PYTHON_PATH -m pip install uv
+
+    # Set UV to use copy mode instead of hardlinks
+    export UV_LINK_MODE=copy
+
+    # Install requirements using uv
     uv pip install -r requirements/base.txt
     uv pip install -r "requirements/$lib.txt"
 }
