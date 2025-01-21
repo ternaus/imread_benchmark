@@ -8,6 +8,7 @@ import time
 from importlib.metadata import version
 from pathlib import Path
 
+import cpuinfo
 import numpy as np
 from tqdm import tqdm
 
@@ -63,6 +64,29 @@ def get_package_versions():
                 versions[lib_name] = f"Error getting version: {e!s}"
 
     return versions
+
+
+def get_system_identifier() -> str:
+    """Get a detailed system identifier including OS and CPU.
+
+    Returns:
+        str: A string combining OS and CPU model, formatted as 'os_cpu-model'
+
+    """
+    try:
+        cpu_info = cpuinfo.get_cpu_info()
+        cpu_brand = cpu_info.get("brand_raw", "Unknown")
+
+        # Simple OS identification
+        os_id = "darwin" if platform.system().lower() == "darwin" else "linux"
+
+        # Replace spaces with hyphens but keep full names
+        cpu_id = cpu_brand.replace(" ", "-")
+    except Exception as e:
+        logger.warning(f"Failed to get system info: {e}")
+        return "unknown-system"
+    else:
+        return f"{os_id}_{cpu_id}"
 
 
 def setup_library():
@@ -162,9 +186,9 @@ def main():
     # Set up library and get read function once at startup
     library, read_image = setup_library()
 
-    # Create output directory
-    os_name = platform.system().lower()
-    output_dir = args.output_dir / os_name
+    # Create output directory with detailed system info
+    system_id = get_system_identifier()
+    output_dir = args.output_dir / system_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Get image paths
