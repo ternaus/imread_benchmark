@@ -6,7 +6,7 @@
 [tool.black]
 line-length = 120
 target-version = [
-  "py310",
+  "py312",
 ]
 include = '\.pyi?$'
 exclude = '''
@@ -27,8 +27,7 @@ exclude = '''
 '''
 
 [tool.ruff]
-# Assume Python 3.10
-target-version = "py310"
+target-version = "py312"
 
 # Same as Black.
 line-length = 120
@@ -75,91 +74,24 @@ format.line-ending = "auto"
 # Like Black, respect magic trailing commas.
 format.skip-magic-trailing-comma = false
 lint.select = [
-  "A",
-  "ANN",
-  "ARG",
-  "ASYNC",
-  "B",
-  "BLE",
-  "C4",
-  "C90",
-  "COM",
-  "CPY",
-  "D",
-  "DJ",
-  "DTZ",
-  "E",
-  "EM",
-  "ERA",
-  "EXE",
-  "F",
-  "FBT",
-  "FIX",
-  "FLY",
-  "FURB",
-  "G",
-  "I",
-  "ICN",
-  "INP",
-  "INT",
-  "ISC",
-  "LOG",
-  "N",
-  "NPY",
-  "PD",
-  "PERF",
-  "PGH",
-  "PIE",
-  "PL",
-  "PT",
-  "PTH",
-  "PYI",
-  "Q",
-  "RET",
-  "RSE",
-  "RUF",
-  "S",
-  "SIM",
-  "SLF",
-  "SLOT",
-  "T10",
-  "T20",
-  "TCH",
-  "TD",
-  "TID",
-  "TRIO",
-  "TRY",
-  "UP",
-  "W",
-  "YTT",
+  "ALL",
 ]
 lint.ignore = [
   "ANN001",
-  "ANN101",
   "ANN201",
-  "ANN204",
-  "B024",
-  "COM812",
+  "ANN202",
+  "BLE001",
+  "C901",
   "D100",
-  "D101",
-  "D102",
   "D103",
-  "D104",
-  "D105",
-  "D107",
   "D203",
-  "D205",
-  "D211",
-  "D212",
-  "D401",
-  "FBT001",
-  "ISC001",
+  "EM101",
+  "EM102",
+  "G004",
   "N812",
-  "PD901",
-  "PERF203",
-  "PLR0913",
-  "T201",
+  "TRY003",
 ]
+
 lint.explicit-preview-rules = true
 # Allow fix for all enabled rules (when `--fix`) is provided.
 lint.fixable = [
@@ -167,11 +99,12 @@ lint.fixable = [
 ]
 lint.unfixable = [
 ]
+
 # Allow unused variables when underscore-prefixed.
 lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true
