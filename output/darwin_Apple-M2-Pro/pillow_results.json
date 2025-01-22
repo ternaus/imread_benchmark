@@ -1,0 +1,27 @@
+{
+  "library": "pillow",
+  "system_info": {
+    "Python": "3.11.5",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 23.5.0: Wed May  1 20:14:38 PDT 2024; root:xnu-10063.121.3~5/RELEASE_ARM64_T6020",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M2 Pro",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 12
+    }
+  },
+  "benchmark_results": {
+    "images_per_second": "611.94 \u00b1 14.94",
+    "raw_times": [
+      583.4479535081801,
+      614.1078536028975,
+      624.1368302740742,
+      624.0311267409298,
+      613.9669264601398
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

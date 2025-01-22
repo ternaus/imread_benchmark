@@ -1,0 +1,28 @@
+{
+  "library": "opencv",
+  "system_info": {
+    "Python": "3.11.5",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 23.5.0: Wed May  1 20:14:38 PDT 2024; root:xnu-10063.121.3~5/RELEASE_ARM64_T6020",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M2 Pro",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 12
+    },
+    "opencv": "4.11.0.86"
+  },
+  "benchmark_results": {
+    "images_per_second": "742.30 \u00b1 1.97",
+    "raw_times": [
+      742.1287964513549,
+      743.0504925520996,
+      739.0741397857058,
+      742.0521577003833,
+      745.1824884539037
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}
