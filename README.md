@@ -1,15 +1,22 @@
 # Image Loading Benchmark
-
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-
 ## Overview
 
 This benchmark evaluates the efficiency of different libraries in loading JPG images
 and converting them into RGB numpy arrays, essential for neural network training
-data preparation. Inspired by the [Albumentations library](
-https://github.com/albumentations-team/albumentations/).
+data preparation. The study compares traditional image processing libraries (Pillow, OpenCV),
+machine learning frameworks (TensorFlow, PyTorch), and specialized decoders (jpeg4py, kornia-rs)
+across different computing architectures.
 
-![Benchmark-2024-06-05](images/2024-06-05.png)
+<table>
+  <tr>
+    <td><img src="images/performance_darwin.png" alt="Darwin Performance" width="400"/></td>
+    <td><img src="images/performance_linux.png" alt="Linux Performance" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center">Performance on Apple Silicon (M4 Max)</td>
+    <td align="center">Performance on Linux (AMD Threadripper)</td>
+  </tr>
+</table>
 
 ## Important Note on Image Conversion
 
@@ -88,33 +95,58 @@ output/
 
 ## Libraries Being Benchmarked
 
+Each library uses different underlying JPEG decoders and implementation approaches:
+
+### Direct libjpeg-turbo Users (Fastest)
+- jpeg4py (Linux only) - Direct libjpeg-turbo binding
+- kornia-rs - Modern Rust-based implementation
 - OpenCV (opencv-python-headless)
+- torchvision
+
+### Standard libjpeg Users
 - PIL (Pillow)
-- Pillow-SIMD (pillow-simd)
+- Pillow-SIMD (Linux only)
 - scikit-image
 - imageio
-- torchvision
+
+### Machine Learning Framework Components
 - tensorflow
+- torchvision
 - kornia-rs
-- jpeg4py
 
-## Hardware and Software Specifications
 
-**CPU**: AMD Ryzen Threadripper 3970X 32-Core Processor
+## Performance Considerations
 
-## Latest Results
+Several factors influence real-world performance beyond raw decoding speed:
 
-|    | Library                | Version   | Performance (images/sec)   |
-|---:|:-----------------------|:----------|:---------------------------|
-|  0 | scikit-image          | 0.23.2    | 538.48 ± 6.86             |
-|  1 | imageio               | 2.34.1    | 538.58 ± 6.84             |
-|  2 | opencv-python-headless| 4.10.0.82 | 631.46 ± 0.43             |
-|  3 | pillow                | 10.3.0    | 589.56 ± 8.79             |
-|  4 | jpeg4py               | 0.1.4     | 700.60 ± 0.88             |
-|  5 | torchvision           | 0.18.1    | 658.68 ± 0.78             |
-|  6 | tensorflow            | 2.16.1    | 704.43 ± 1.10             |
-|  7 | kornia-rs             | 0.1.1     | 682.95 ± 1.21             |
+### Memory Usage
+- Memory utilization varies significantly across libraries
+- Some implementations (like kornia-rs) have specific memory allocation optimizations
+- Consider available system resources when scaling to batch processing
 
-## Contributing
+### System Integration
+- All benchmarks performed on NVMe SSDs to minimize I/O variance
+- Single-threaded performance reported
+- Multi-threading capabilities vary between libraries
 
-Feel free to submit issues and enhancement requests!
+### Image Characteristics
+- Results based on typical ImageNet JPEG images (~500x400 pixels)
+- Performance scaling with image size varies between implementations
+- Compression ratio and JPEG encoding parameters can influence decoding speed
+
+## Recommendations
+
+### High-Performance Applications
+- Use kornia-rs or OpenCV for consistent cross-platform performance
+- On Linux, consider jpeg4py for maximum performance
+- Consider memory usage if processing many images simultaneously
+
+### Cross-Platform Development
+- kornia-rs provides the most consistent performance
+- OpenCV and torchvision offer good balance of features and speed
+- Test with representative image sizes and batching patterns
+
+### Feature-Rich Applications
+- When needing extensive image processing features, OpenCV remains a strong choice
+- Consider dependency size and installation complexity
+- Evaluate the full image processing pipeline, not just JPEG decoding
