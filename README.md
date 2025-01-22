@@ -37,10 +37,6 @@ dependencies:
 # On Ubuntu/Debian
 sudo apt-get install libturbojpeg
 
-# On macOS
-brew install libjpeg-turbo
-```
-
 ### Python Setup
 
 The benchmark uses separate virtual environments for each library to avoid
