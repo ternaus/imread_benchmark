@@ -1,0 +1,26 @@
+{
+  "library": "imageio",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.2.0: Fri Dec  6 19:01:59 PST 2024; root:xnu-11215.61.5~2/RELEASE_ARM64_T6000",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M1 Pro",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 10
+    },
+    "imageio": "2.37.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "0.00 \u00b1 0.00",
+    "raw_times": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "num_images": 1000,
+  "num_runs": 3
+}
