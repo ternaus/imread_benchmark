@@ -1,0 +1,28 @@
+{
+  "library": "tensorflow",
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Fri Apr 2 22:23:49 UTC 2021",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD Ryzen 7 5800H with Radeon Graphics",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "tensorflow": "2.18.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "566.44 \u00b1 30.85",
+    "raw_times": [
+      505.87049237606567,
+      571.515885176148,
+      584.4375867071042,
+      580.9033505489894,
+      589.4840583605318
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}
