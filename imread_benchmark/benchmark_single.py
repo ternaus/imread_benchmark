@@ -67,7 +67,8 @@ def get_package_versions():
 
 
 def get_system_identifier() -> str:
-    """Get a detailed system identifier including OS and CPU.
+    """
+    Get a detailed system identifier including OS and CPU.
 
     Returns:
         str: A string combining OS and CPU model, formatted as 'os_cpu-model'
