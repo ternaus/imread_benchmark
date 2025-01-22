@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         operating-system: [ubuntu-latest]
-        python-version: ["3.10"]
+        python-version: ["3.12"]
       fail-fast: false
     steps:
     - name: Checkout
@@ -30,6 +30,5 @@ jobs:
     - name: Install dev requirements
       run: |
         pip install -r requirements-dev.txt
-        pip install -r requirements.txt
     - name: Run checks
       run: pre-commit run --files $(find imread_benchmark -type f)
