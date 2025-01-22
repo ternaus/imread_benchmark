@@ -49,6 +49,21 @@ pip install uv
 
 ## Running the Benchmark
 
+To reproduce the benchmarks, you'll need the ImageNet validation dataset:
+
+Download the validation set (50,000 images, ~6.3GB):
+
+```bash
+wget https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar
+```
+
+Create a directory and extract the images:
+
+```bash
+mkdir -p imagenet/val
+tar -xf ILSVRC2012_img_val.tar -C imagenet/val
+```
+
 The benchmark script creates separate virtual environments for each library and
 runs tests independently:
 
