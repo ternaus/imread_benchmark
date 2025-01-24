@@ -1,0 +1,28 @@
+{
+  "library": "kornia",
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Fri Apr 2 22:23:49 UTC 2021",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD Ryzen 7 5800H with Radeon Graphics",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "kornia": "0.1.8"
+  },
+  "benchmark_results": {
+    "images_per_second": "636.05 \u00b1 6.47",
+    "raw_times": [
+      632.2489653563072,
+      639.4599354660477,
+      643.2541680824824,
+      639.9760700151077,
+      625.2959805305121
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

@@ -1,0 +1,28 @@
+{
+  "library": "imageio",
+  "system_info": {
+    "Python": "3.10.12",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Tue Jul 18 16:14:52 UTC 2023",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 7702 64-Core Processor",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 128
+    },
+    "imageio": "2.37.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "357.35 \u00b1 8.78",
+    "raw_times": [
+      350.6178649348752,
+      345.7227003102819,
+      367.10917282075786,
+      355.6226220013408,
+      367.6737228735568
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

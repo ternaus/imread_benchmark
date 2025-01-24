@@ -1,0 +1,28 @@
+{
+  "library": "imageio",
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Fri Apr 2 22:23:49 UTC 2021",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD Ryzen 7 5800H with Radeon Graphics",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "imageio": "2.37.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "232.22 \u00b1 10.64",
+    "raw_times": [
+      213.29200785324863,
+      235.43642442396626,
+      236.9526381160553,
+      245.28659613229487,
+      230.1334772223214
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

@@ -1,0 +1,28 @@
+{
+  "library": "tensorflow",
+  "system_info": {
+    "Python": "3.10.12",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Tue Jul 18 16:14:52 UTC 2023",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 7702 64-Core Processor",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 128
+    },
+    "tensorflow": "2.18.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "428.93 \u00b1 18.18",
+    "raw_times": [
+      392.69744997412283,
+      435.01376479908913,
+      439.16813326933436,
+      438.55240468393026,
+      439.2017074170524
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

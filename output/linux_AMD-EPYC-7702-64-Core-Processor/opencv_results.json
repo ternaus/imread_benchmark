@@ -1,0 +1,28 @@
+{
+  "library": "opencv",
+  "system_info": {
+    "Python": "3.10.12",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Tue Jul 18 16:14:52 UTC 2023",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 7702 64-Core Processor",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 128
+    },
+    "opencv": "4.11.0.86"
+  },
+  "benchmark_results": {
+    "images_per_second": "460.45 \u00b1 13.14",
+    "raw_times": [
+      468.0762645807466,
+      461.66960039266627,
+      461.7170510265016,
+      436.01765876609267,
+      474.760057820139
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

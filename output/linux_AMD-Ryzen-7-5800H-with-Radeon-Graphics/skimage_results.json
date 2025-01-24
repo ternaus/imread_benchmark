@@ -1,0 +1,28 @@
+{
+  "library": "skimage",
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Fri Apr 2 22:23:49 UTC 2021",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD Ryzen 7 5800H with Radeon Graphics",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "skimage": "0.25.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "214.27 \u00b1 5.44",
+    "raw_times": [
+      221.2572516431234,
+      204.7309556598381,
+      215.69487991923398,
+      213.1790216008505,
+      216.4677450664295
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

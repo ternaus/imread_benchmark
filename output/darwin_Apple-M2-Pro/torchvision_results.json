@@ -1,0 +1,28 @@
+{
+  "library": "torchvision",
+  "system_info": {
+    "Python": "3.11.5",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 23.5.0: Wed May  1 20:14:38 PDT 2024; root:xnu-10063.121.3~5/RELEASE_ARM64_T6020",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M2 Pro",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 12
+    },
+    "torchvision": "0.20.1"
+  },
+  "benchmark_results": {
+    "images_per_second": "736.31 \u00b1 3.46",
+    "raw_times": [
+      731.2712185698072,
+      733.4794076117929,
+      736.969300342783,
+      739.8676853641501,
+      739.9628320653186
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

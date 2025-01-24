@@ -1,0 +1,28 @@
+{
+  "library": "skimage",
+  "system_info": {
+    "Python": "3.10.12",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Tue Jul 18 16:14:52 UTC 2023",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 7702 64-Core Processor",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 128
+    },
+    "skimage": "0.25.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "333.99 \u00b1 2.90",
+    "raw_times": [
+      334.5000103275036,
+      335.3962738116437,
+      334.7034396326541,
+      328.44054004502726,
+      336.8944418336079
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

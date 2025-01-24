@@ -1,0 +1,28 @@
+{
+  "library": "tensorflow",
+  "system_info": {
+    "Python": "3.11.5",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 23.5.0: Wed May  1 20:14:38 PDT 2024; root:xnu-10063.121.3~5/RELEASE_ARM64_T6020",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M2 Pro",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 12
+    },
+    "tensorflow": "2.18.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "500.19 \u00b1 5.04",
+    "raw_times": [
+      498.52430573638554,
+      494.66850918184076,
+      505.9407083665589,
+      506.36876349708973,
+      495.4666402753553
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}
