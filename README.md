@@ -162,11 +162,12 @@ Several factors influence real-world performance beyond raw decoding speed:
 - Consider dependency size and installation complexity
 - Evaluate the full image processing pipeline, not just JPEG decoding
 
+
 ## Citation
 
 If you found this work useful, please cite:
 ```bibtex
-@misc{iglovikov2025need,
+@misc{iglovikov2025speed,
       title={Need for Speed: A Comprehensive Benchmark of JPEG Decoders in Python},
       author={Vladimir Iglovikov},
       year={2025},
