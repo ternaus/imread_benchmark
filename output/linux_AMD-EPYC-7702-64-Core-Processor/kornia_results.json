@@ -1,0 +1,28 @@
+{
+  "library": "kornia",
+  "system_info": {
+    "Python": "3.10.12",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Tue Jul 18 16:14:52 UTC 2023",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 7702 64-Core Processor",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 128
+    },
+    "kornia": "0.1.8"
+  },
+  "benchmark_results": {
+    "images_per_second": "490.01 \u00b1 12.64",
+    "raw_times": [
+      464.7652388557977,
+      497.4865124523582,
+      496.03687396471884,
+      495.7081150336569,
+      496.05794802041527
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

@@ -1,0 +1,28 @@
+{
+  "library": "jpeg4py",
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Fri Apr 2 22:23:49 UTC 2021",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD Ryzen 7 5800H with Radeon Graphics",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "jpeg4py": "0.1.4"
+  },
+  "benchmark_results": {
+    "images_per_second": "634.87 \u00b1 32.19",
+    "raw_times": [
+      587.8725941900659,
+      661.4464667702507,
+      663.5126559392119,
+      604.1841423030766,
+      657.3304675030939
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

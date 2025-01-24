@@ -1,0 +1,28 @@
+{
+  "library": "opencv",
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Fri Apr 2 22:23:49 UTC 2021",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD Ryzen 7 5800H with Radeon Graphics",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "opencv": "4.11.0.86"
+  },
+  "benchmark_results": {
+    "images_per_second": "603.42 \u00b1 26.44",
+    "raw_times": [
+      551.1242831624829,
+      612.0759014295824,
+      613.4292612948815,
+      617.0686591712453,
+      623.3848878736602
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

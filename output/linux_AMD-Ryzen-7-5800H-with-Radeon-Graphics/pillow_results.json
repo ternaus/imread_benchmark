@@ -1,0 +1,27 @@
+{
+  "library": "pillow",
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Fri Apr 2 22:23:49 UTC 2021",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD Ryzen 7 5800H with Radeon Graphics",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    }
+  },
+  "benchmark_results": {
+    "images_per_second": "512.56 \u00b1 11.76",
+    "raw_times": [
+      495.68299542563364,
+      524.0620921660072,
+      524.6785949506502,
+      516.4234190615373,
+      501.94704241307784
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

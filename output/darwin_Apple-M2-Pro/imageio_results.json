@@ -1,0 +1,28 @@
+{
+  "library": "imageio",
+  "system_info": {
+    "Python": "3.11.5",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 23.5.0: Wed May  1 20:14:38 PDT 2024; root:xnu-10063.121.3~5/RELEASE_ARM64_T6020",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M2 Pro",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 12
+    },
+    "imageio": "2.37.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "559.21 \u00b1 66.57",
+    "raw_times": [
+      426.64031736134865,
+      592.4497683139233,
+      581.3457343554974,
+      596.3111002730893,
+      599.3217401563282
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

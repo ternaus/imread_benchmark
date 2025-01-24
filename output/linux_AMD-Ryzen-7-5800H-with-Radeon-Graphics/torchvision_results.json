@@ -1,0 +1,28 @@
+{
+  "library": "torchvision",
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#1 SMP Fri Apr 2 22:23:49 UTC 2021",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD Ryzen 7 5800H with Radeon Graphics",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "torchvision": "0.20.1+cpu"
+  },
+  "benchmark_results": {
+    "images_per_second": "550.26 \u00b1 10.89",
+    "raw_times": [
+      528.7543046984315,
+      555.041959812283,
+      556.932352665706,
+      552.7791656898008,
+      557.7946305904339
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}
