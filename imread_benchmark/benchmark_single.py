@@ -192,9 +192,13 @@ def main():
     output_dir = args.output_dir / system_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get image paths
-    image_paths = sorted(Path(args.data_dir).glob("*.*"))[: args.num_images]
-    image_paths = [str(x) for x in image_paths]
+    # Define supported image extensions
+    image_extensions = {".jpg", ".jpeg", ".JPEG", ".JPG"}
+
+    # Get image paths recursively, filtering for supported extensions
+    image_paths = [str(p) for p in sorted(Path(args.data_dir).rglob("*")) if p.suffix.lower() in image_extensions][
+        : args.num_images
+    ]
 
     # Run benchmark
     results = {
