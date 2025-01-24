@@ -12,7 +12,7 @@ to output/<operating_system>/<library>_results.json
 Arguments:
     path_to_image_directory  (Required) Directory containing images to benchmark
     num_images              (Optional) Number of images to process (default: 2000)
-    num_runs               (Optional) Number of benchmark runs (default: 5)
+    num_runs               (Optional) Number of benchmark runs (default: 20)
 
 Example usage:
     # Basic usage with defaults (2000 images, 5 runs):
@@ -61,6 +61,16 @@ mkdir -p output
 
 # List of libraries to benchmark
 LIBRARIES=("opencv" "pillow" "jpeg4py" "skimage" "imageio" "torchvision" "tensorflow" "kornia" "pillow-simd")
+
+# Function to get libraries based on OS
+get_libraries() {
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # Skip jpeg4py and pillow-simd on macOS
+        echo "${LIBRARIES[@]}" | tr ' ' '\n' | grep -v "jpeg4py" | grep -v "pillow-simd" | tr '\n' ' '
+    else
+        echo "${LIBRARIES[@]}"
+    fi
+}
 
 # Function to create and activate virtual environment
 setup_venv() {
@@ -118,7 +128,7 @@ fi
 
 DATA_DIR=$1
 NUM_IMAGES=${2:-2000}
-NUM_RUNS=${3:-5}
+NUM_RUNS=${3:-20}
 
 echo "Starting benchmarks with:"
 echo "  Image directory: $DATA_DIR"
@@ -127,7 +137,7 @@ echo "  Number of runs: $NUM_RUNS"
 echo
 
 # Run benchmarks for each library
-for lib in "${LIBRARIES[@]}"; do
+for lib in $(get_libraries); do
     echo "Processing $lib..."
     setup_venv "$lib"
     run_benchmark "$lib"

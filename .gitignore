@@ -109,4 +109,4 @@ venv.bak/
 .idea/
 .ruff_cache/
 
-venvs/
+output/
