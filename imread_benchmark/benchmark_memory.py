@@ -15,21 +15,21 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def run_benchmark(read_image, image_paths, num_runs):
+def run_memory_benchmark(decode_image, image_bytes_list, num_runs):
     # Warm-up run
     logger.info("Performing warm-up run...")
-    for path in tqdm(image_paths, desc="Warm-up"):
-        read_image(path)
+    for image_bytes in tqdm(image_bytes_list, desc="Warm-up"):
+        decode_image(image_bytes)
 
     times = []
     for _ in tqdm(range(num_runs), desc="Benchmarking"):
         start_time = time.perf_counter()
-        for path in image_paths:
-            read_image(path)
+        for image_bytes in image_bytes_list:
+            decode_image(image_bytes)
         end_time = time.perf_counter()
 
         run_time = end_time - start_time
-        images_per_second = len(image_paths) / run_time
+        images_per_second = len(image_bytes_list) / run_time
         times.append(images_per_second)
 
     median_ips = float(np.median(times))
@@ -58,8 +58,8 @@ def main():
     parser.add_argument("-o", "--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
-    # Set up library and get read function once at startup
-    library, read_image = setup_decoder(mode="disk")
+    # Set up library and get decode function
+    library, decode_image = setup_decoder(mode="memory")
 
     # Create output directory with detailed system info
     system_id = get_system_identifier()
@@ -69,22 +69,29 @@ def main():
     # Define supported image extensions
     image_extensions = {".jpg", ".jpeg", ".JPEG", ".JPG"}
 
-    # Get image paths recursively, filtering for supported extensions
-    image_paths = [str(p) for p in sorted(Path(args.data_dir).rglob("*")) if p.suffix.lower() in image_extensions][
+    # Get image paths and load them into memory
+    image_paths = [p for p in sorted(Path(args.data_dir).rglob("*")) if p.suffix.lower() in image_extensions][
         : args.num_images
     ]
+
+    # Load all images into memory
+    logger.info("Loading images into memory...")
+    image_bytes_list = []
+    for path in tqdm(image_paths):
+        with path.open("rb") as f:
+            image_bytes_list.append(f.read())
 
     # Run benchmark
     results = {
         "library": library,
         "system_info": get_package_versions(),
-        "benchmark_results": run_benchmark(read_image, image_paths, args.num_runs),
+        "benchmark_results": run_memory_benchmark(decode_image, image_bytes_list, args.num_runs),
         "num_images": args.num_images,
         "num_runs": args.num_runs,
     }
 
     # Save results
-    output_file = output_dir / f"{library}_results.json"
+    output_file = output_dir / f"{library}_memory_results.json"
     with output_file.open("w") as f:
         json.dump(results, f, indent=2)
 

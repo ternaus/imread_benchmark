@@ -1,0 +1,36 @@
+{
+  "library": "tensorflow",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.1.0: Thu Oct 10 21:06:57 PDT 2024; root:xnu-11215.41.3~3/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "tensorflow": "Error getting version: name 'version' is not defined"
+  },
+  "benchmark_results": {
+    "images_per_second_median": "680.93",
+    "images_per_second_mean": "680.29 \u00b1 2.08",
+    "raw_times": [
+      681.505279957535,
+      680.9257722693474,
+      683.1830536163241,
+      678.1673585175894,
+      677.6500468257144
+    ],
+    "statistics": {
+      "median": 680.9257722693474,
+      "mean": 680.286302237302,
+      "std": 2.0845029258127274,
+      "min": 677.6500468257144,
+      "max": 683.1830536163241
+    }
+  },
+  "num_images": 2000,
+  "num_runs": 5
+}

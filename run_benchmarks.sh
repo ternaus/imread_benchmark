@@ -109,13 +109,22 @@ setup_venv() {
 # Function to run benchmark for a single library
 run_benchmark() {
     local lib=$1
-    echo "Running benchmark for $lib..."
+    echo "Running benchmarks for $lib..."
     export BENCHMARK_LIBRARY=$lib
-    python imread_benchmark/benchmark_single.py \
+
+    echo "Running disk-based benchmark..."
+    python -m imread_benchmark.benchmark_single \
         --data-dir "$DATA_DIR" \
         --num-images "$NUM_IMAGES" \
         --num-runs "$NUM_RUNS" \
         --output-dir output
+
+#     echo "Running memory-based benchmark..."
+#     python -m imread_benchmark.benchmark_memory \
+#         --data-dir "$DATA_DIR" \
+#         --num-images "$NUM_IMAGES" \
+#         --num-runs "$NUM_RUNS" \
+#         --output-dir output
 }
 
 # Check if required arguments are provided
@@ -141,6 +150,7 @@ for lib in $(get_libraries); do
     echo "Processing $lib..."
     setup_venv "$lib"
     run_benchmark "$lib"
+
     deactivate
     echo "Completed $lib"
     echo
@@ -149,3 +159,6 @@ done
 echo "All benchmarks completed!"
 echo "Results are saved in the output directory organized by operating system."
 echo "Check output/$(uname -s | tr '[:upper:]' '[:lower:]')/ for results."
+echo "Each library has two result files:"
+echo "  - <library>_results.json (disk-based benchmark)"
+echo "  - <library>_memory_results.json (memory-based benchmark)"
