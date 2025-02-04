@@ -1,0 +1,30 @@
+{
+  "library": "kornia",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.1.0: Thu Oct 10 21:06:57 PDT 2024; root:xnu-11215.41.3~3/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "kornia": "0.1.8"
+  },
+  "benchmark_results": {
+    "images_per_second": "206.63 \u00b1 0.84",
+    "raw_times": [
+      205.66933274426543,
+      206.16782524247958,
+      207.83851925493434,
+      206.07293973978196,
+      207.40557972847535
+    ]
+  },
+  "num_images": 20000,
+  "num_runs": 5,
+  "batch_size": 1024,
+  "num_workers": 16
+}

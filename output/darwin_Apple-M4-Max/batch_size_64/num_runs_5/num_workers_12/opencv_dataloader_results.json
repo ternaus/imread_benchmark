@@ -1,0 +1,30 @@
+{
+  "library": "opencv",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.1.0: Thu Oct 10 21:06:57 PDT 2024; root:xnu-11215.41.3~3/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "opencv": "4.11.0.86"
+  },
+  "benchmark_results": {
+    "images_per_second": "280.89 \u00b1 0.16",
+    "raw_times": [
+      280.7008679618426,
+      280.9075640243735,
+      280.72460832426145,
+      281.1321787696369,
+      281.005463117543
+    ]
+  },
+  "num_images": 20000,
+  "num_runs": 5,
+  "batch_size": 64,
+  "num_workers": 12
+}

@@ -1,0 +1,30 @@
+{
+  "library": "jpeg4py",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.1.0: Thu Oct 10 21:06:57 PDT 2024; root:xnu-11215.41.3~3/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "jpeg4py": "0.1.4"
+  },
+  "benchmark_results": {
+    "images_per_second": "206.07 \u00b1 0.21",
+    "raw_times": [
+      205.67520854041203,
+      206.18707249449378,
+      206.18764243738232,
+      206.2762052873222,
+      206.02046620966897
+    ]
+  },
+  "num_images": 20000,
+  "num_runs": 5,
+  "batch_size": 16,
+  "num_workers": 16
+}

@@ -1,0 +1,27 @@
+{
+  "library": "torchvision",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.1.0: Thu Oct 10 21:06:57 PDT 2024; root:xnu-11215.41.3~3/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "torchvision": "0.21.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "2.56 \u00b1 0.14",
+    "raw_times": [
+      2.416688658597759,
+      2.7062195111125105
+    ]
+  },
+  "num_images": 100,
+  "num_runs": 2,
+  "batch_size": 16,
+  "num_workers": 16
+}

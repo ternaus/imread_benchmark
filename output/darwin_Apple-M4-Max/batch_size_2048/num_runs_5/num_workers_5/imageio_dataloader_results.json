@@ -1,0 +1,30 @@
+{
+  "library": "imageio",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.1.0: Thu Oct 10 21:06:57 PDT 2024; root:xnu-11215.41.3~3/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "imageio": "2.37.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "543.27 \u00b1 3.70",
+    "raw_times": [
+      545.0303031622626,
+      546.1267169898795,
+      544.0208582376199,
+      545.1769791240574,
+      535.9850568751119
+    ]
+  },
+  "num_images": 20000,
+  "num_runs": 5,
+  "batch_size": 2048,
+  "num_workers": 5
+}

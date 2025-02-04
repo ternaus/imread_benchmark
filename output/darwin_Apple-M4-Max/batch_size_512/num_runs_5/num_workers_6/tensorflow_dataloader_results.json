@@ -1,0 +1,30 @@
+{
+  "library": "tensorflow",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.1.0: Thu Oct 10 21:06:57 PDT 2024; root:xnu-11215.41.3~3/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "tensorflow": "2.18.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "449.94 \u00b1 8.57",
+    "raw_times": [
+      432.91218961867884,
+      454.42070702723913,
+      454.53549953610144,
+      455.3689358018552,
+      452.4511059318993
+    ]
+  },
+  "num_images": 20000,
+  "num_runs": 5,
+  "batch_size": 512,
+  "num_workers": 6
+}

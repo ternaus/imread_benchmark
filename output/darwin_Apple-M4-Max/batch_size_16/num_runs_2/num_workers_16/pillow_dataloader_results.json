@@ -1,0 +1,26 @@
+{
+  "library": "pillow",
+  "system_info": {
+    "Python": "3.12.8",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 24.1.0: Thu Oct 10 21:06:57 PDT 2024; root:xnu-11215.41.3~3/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    }
+  },
+  "benchmark_results": {
+    "images_per_second": "2.70 \u00b1 0.03",
+    "raw_times": [
+      2.6706585356029797,
+      2.738357252017299
+    ]
+  },
+  "num_images": 100,
+  "num_runs": 2,
+  "batch_size": 16,
+  "num_workers": 16
+}
