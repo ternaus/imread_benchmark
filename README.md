@@ -18,6 +18,11 @@ across different computing architectures.
   </tr>
 </table>
 
+## GitAds Sponsored
+[![Sponsored by GitAds](https://gitads.dev/v1/ad-serve?source=ternaus/imread_benchmark@github)](https://gitads.dev/v1/ad-track?source=ternaus/imread_benchmark@github)
+
+
+
 ## Important Note on Image Conversion
 
 In the benchmark, it's crucial to standardize image formats for a fair comparison.
