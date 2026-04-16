@@ -1,0 +1,88 @@
+{
+  "library": "opencv",
+  "benchmark_type": "dataloader",
+  "batch_size": 32,
+  "num_threads": 16,
+  "system_info": {
+    "Python": "3.12.7",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 25.4.0: Thu Mar 19 19:33:25 PDT 2026; root:xnu-12377.101.15~1/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "opencv": "4.13.0.92"
+  },
+  "worker_results": [
+    {
+      "num_workers": 0,
+      "images_per_second": "806.68 \u00b1 320.97",
+      "images_per_second_mean": 806.680019687515,
+      "images_per_second_std": 320.96903528585864,
+      "raw_times": [
+        164.90505977688701,
+        957.4137000744104,
+        973.8171605951967,
+        976.3163948623541,
+        960.9477831287272
+      ]
+    },
+    {
+      "num_workers": 1,
+      "images_per_second": "729.76 \u00b1 149.54",
+      "images_per_second_mean": 729.7563380567439,
+      "images_per_second_std": 149.5443844313289,
+      "raw_times": [
+        430.93425265250505,
+        805.6780969532194,
+        794.7586462078966,
+        814.5221423149463,
+        802.8885521551517
+      ]
+    },
+    {
+      "num_workers": 2,
+      "images_per_second": "1070.81 \u00b1 192.73",
+      "images_per_second_mean": 1070.812289856855,
+      "images_per_second_std": 192.73313974922615,
+      "raw_times": [
+        687.9355311942322,
+        1191.9466723874198,
+        1187.2179957654985,
+        1156.7188765338547,
+        1130.242373403269
+      ]
+    },
+    {
+      "num_workers": 4,
+      "images_per_second": "1045.15 \u00b1 294.29",
+      "images_per_second_mean": 1045.1537942923667,
+      "images_per_second_std": 294.2936438741821,
+      "raw_times": [
+        464.5284254739921,
+        1282.102271896801,
+        1143.4844799925654,
+        1169.703081864241,
+        1165.950712234234
+      ]
+    },
+    {
+      "num_workers": 8,
+      "images_per_second": "894.29 \u00b1 300.06",
+      "images_per_second_mean": 894.2949425969767,
+      "images_per_second_std": 300.06173266730633,
+      "raw_times": [
+        303.4941355547654,
+        1134.7811215410898,
+        1004.4248263214834,
+        1048.541920531643,
+        980.2327090359017
+      ]
+    }
+  ],
+  "num_images": 2000,
+  "num_runs": 5
+}

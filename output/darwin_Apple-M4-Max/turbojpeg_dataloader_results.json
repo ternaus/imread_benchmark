@@ -1,0 +1,88 @@
+{
+  "library": "turbojpeg",
+  "benchmark_type": "dataloader",
+  "batch_size": 32,
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.7",
+    "OS": "Darwin",
+    "OS Version": "Darwin Kernel Version 25.4.0: Thu Mar 19 19:33:25 PDT 2026; root:xnu-12377.101.15~1/RELEASE_ARM64_T6041",
+    "Machine": "arm64",
+    "CPU": {
+      "brand_raw": "Apple M4 Max",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "turbojpeg": "2.2.0"
+  },
+  "worker_results": [
+    {
+      "num_workers": 0,
+      "images_per_second": "962.04 \u00b1 10.57",
+      "images_per_second_mean": 962.0365713853853,
+      "images_per_second_std": 10.574943373479513,
+      "raw_times": [
+        966.4782456905828,
+        945.5520592627449,
+        970.5706206732118,
+        973.5041971023602,
+        954.0777341980264
+      ]
+    },
+    {
+      "num_workers": 1,
+      "images_per_second": "738.97 \u00b1 150.17",
+      "images_per_second_mean": 738.9715375647364,
+      "images_per_second_std": 150.17213460046432,
+      "raw_times": [
+        438.8226307697671,
+        820.3054446008134,
+        804.6442051930677,
+        818.2439209219615,
+        812.8414863380727
+      ]
+    },
+    {
+      "num_workers": 2,
+      "images_per_second": "1110.87 \u00b1 209.97",
+      "images_per_second_mean": 1110.874949707386,
+      "images_per_second_std": 209.96573730028558,
+      "raw_times": [
+        698.8445871344273,
+        1209.1335829992386,
+        1274.1598969059974,
+        1224.9716915015013,
+        1147.2649899957653
+      ]
+    },
+    {
+      "num_workers": 4,
+      "images_per_second": "1002.33 \u00b1 273.84",
+      "images_per_second_mean": 1002.3253612720831,
+      "images_per_second_std": 273.842382969999,
+      "raw_times": [
+        470.0409509147558,
+        1201.644059366462,
+        1170.1966135285431,
+        1013.862842165141,
+        1155.8823403855138
+      ]
+    },
+    {
+      "num_workers": 8,
+      "images_per_second": "846.30 \u00b1 278.88",
+      "images_per_second_mean": 846.3018231934235,
+      "images_per_second_std": 278.876555669283,
+      "raw_times": [
+        298.46997392258066,
+        902.9721102515563,
+        1013.1796732051026,
+        957.9400646951316,
+        1058.9472938927465
+      ]
+    }
+  ],
+  "num_images": 2000,
+  "num_runs": 5
+}
