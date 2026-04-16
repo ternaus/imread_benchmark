@@ -111,6 +111,10 @@ venv.bak/
 
 venvs/
 
+# Jupyter — not tracked (use `_internal/` or a local clone path if needed)
+*.ipynb
+/notebooks/
+
 # Local-only drafts, papers, plots, and bulky assets (never commit)
 _internal/
 /paper.md
