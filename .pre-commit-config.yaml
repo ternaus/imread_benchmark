@@ -7,14 +7,15 @@ ci:
   autoupdate_branch: ''
   autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
   autoupdate_schedule: weekly
-  skip: [ ]
+  skip: []
   submodules: false
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
+        args: ['--maxkb=2000']
       - id: check-ast
       - id: check-builtin-literals
       - id: check-case-conflict
@@ -32,42 +33,53 @@ repos:
       - id: fix-byte-order-marker
       - id: check-json
       - id: check-yaml
-        args: [ --unsafe ]
+        args: [--unsafe]
       - id: debug-statements
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: requirements-txt-fixer
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: v0.9.3
+    rev: v0.15.10
     hooks:
-      # Run the linter.
       - id: ruff
-        args: [ --fix ]
-      # Run the formatter.
+        args: [--fix]
       - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.7
+    hooks:
+      - id: uv-lock
+
   - repo: https://github.com/pre-commit/pygrep-hooks
     rev: v1.10.0
     hooks:
       - id: python-check-mock-methods
       - id: python-use-type-annotations
       - id: python-check-blanket-noqa
-      - id: python-use-type-annotations
       - id: text-unicode-replacement-char
+
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.0
+    rev: v2.4.2
     hooks:
       - id: codespell
         additional_dependencies: ["tomli"]
+
   - repo: https://github.com/tox-dev/pyproject-fmt
-    rev: "v2.5.0"
+    rev: "v2.21.1"
     hooks:
       - id: pyproject-fmt
+
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+    rev: v1.20.1
     hooks:
       - id: mypy
-        files: ^albumentations/
-        additional_dependencies: [ types-PyYAML]
-        args:
-          [ --config-file=pyproject.toml ]
+        files: ^imread_benchmark/
+        additional_dependencies: [types-PyYAML]
+        args: [--config-file=pyproject.toml]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]

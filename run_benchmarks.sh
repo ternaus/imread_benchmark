@@ -1,151 +1,196 @@
 #!/bin/bash
 
-# Function to show help message
 show_help() {
     cat << EOF
-Usage: ./run_benchmarks.sh <path_to_image_directory> [num_images] [num_runs]
+Usage: ./run_benchmarks.sh <path_to_image_directory> [num_images] [num_runs] [mode]
 
-This script runs image reading benchmarks for multiple Python libraries.
-It creates separate virtual environments for each library and saves results
-to output/<operating_system>/<library>_results.json
+Runs JPEG decoding benchmarks for multiple Python libraries on ImageNet validation images.
+Each library gets an isolated virtual environment to avoid dependency conflicts.
 
 Arguments:
-    path_to_image_directory  (Required) Directory containing images to benchmark
-    num_images              (Optional) Number of images to process (default: 2000)
-    num_runs               (Optional) Number of benchmark runs (default: 20)
+    path_to_image_directory  (Required) Directory containing JPEG images
+    num_images               (Optional) Number of images to use (default: 2000)
+    num_runs                 (Optional) Number of timed benchmark runs (default: 20)
+    mode                     (Optional) 'memory' or 'disk' (default: memory)
 
-Example usage:
-    # Basic usage with defaults (2000 images, 5 runs):
-    ./run_benchmarks.sh ~/dataset/images
+Examples:
+    ./run_benchmarks.sh ~/imagenet/val
+    ./run_benchmarks.sh ~/imagenet/val 2000 20 memory
 
-    # Custom number of images and runs:
-    ./run_benchmarks.sh ~/dataset/images 1000 3
+System requirements (macOS, install once):
+    brew install jpeg-turbo   # required by simplejpeg, turbojpeg
+    brew install vips         # required by pyvips
 
-Libraries being benchmarked:
-    - opencv (opencv-python-headless)
-    - pil (Pillow)
-    - skimage (scikit-image)
-    - imageio
-    - torchvision
-    - tensorflow
-    - kornia (kornia-rs)
+Libraries benchmarked:
+    opencv, pillow, skimage, imageio, torchvision, tensorflow,
+    kornia, simplejpeg, turbojpeg, imagecodecs, pyvips
 
-Results will be saved in:
-    output/
-    ├── linux/          # When run on Linux
-    │   ├── opencv_results.json
-    │   ├── pil_results.json
-    │   └── ...
-    └── darwin/         # When run on macOS
-        ├── opencv_results.json
-        ├── pil_results.json
-        └── ...
+Results are saved to:
+    output/<os>_<cpu>/
 EOF
 }
 
-# Show help if -h or --help is passed
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     show_help
     exit 0
 fi
 
-# Exit on error
-set -e
-
-# Base directory for virtual environments
-VENV_DIR="venvs"
-mkdir -p "$VENV_DIR"
-
-# Create output directory
-mkdir -p output
-
-# List of libraries to benchmark
-LIBRARIES=("opencv" "pillow" "jpeg4py" "skimage" "imageio" "torchvision" "tensorflow" "kornia" "pillow-simd")
-
-# Function to get libraries based on OS
-get_libraries() {
-    if [[ "$(uname)" == "Darwin" ]]; then
-        # Skip jpeg4py and pillow-simd on macOS
-        echo "${LIBRARIES[@]}" | tr ' ' '\n' | grep -v "jpeg4py" | grep -v "pillow-simd" | tr '\n' ' '
-    else
-        echo "${LIBRARIES[@]}"
-    fi
-}
-
-# Function to create and activate virtual environment
-setup_venv() {
-    local lib=$1
-    echo "Setting up environment for $lib..."
-
-    # Get the full path to the current Python interpreter
-    PYTHON_PATH=$(which python)
-    echo "Using Python: $PYTHON_PATH"
-    echo "Python version: $($PYTHON_PATH --version)"
-
-    # Create venv with the same Python version
-    $PYTHON_PATH -m venv "$VENV_DIR/$lib" --clear
-
-    # Activate virtual environment (works on both Unix and Windows)
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-        source "$VENV_DIR/$lib/Scripts/activate"
-    else
-        source "$VENV_DIR/$lib/bin/activate"
-    fi
-
-    # Upgrade pip first using the correct Python
-    $PYTHON_PATH -m pip install --upgrade pip
-
-    # Install uv using the correct Python
-    $PYTHON_PATH -m pip install uv
-
-    # Set UV to use copy mode instead of hardlinks
-    export UV_LINK_MODE=copy
-
-    # Install requirements using uv
-    uv pip install -r requirements/base.txt
-    uv pip install -r "requirements/$lib.txt"
-}
-
-# Function to run benchmark for a single library
-run_benchmark() {
-    local lib=$1
-    echo "Running benchmark for $lib..."
-    export BENCHMARK_LIBRARY=$lib
-    python imread_benchmark/benchmark_single.py \
-        --data-dir "$DATA_DIR" \
-        --num-images "$NUM_IMAGES" \
-        --num-runs "$NUM_RUNS" \
-        --output-dir output
-}
-
-# Check if required arguments are provided
 if [ -z "$1" ]; then
-    echo "Error: Image directory path is required"
+    echo "Error: image directory path is required"
     echo
     show_help
     exit 1
 fi
 
+set -e
+
+# Ensure Homebrew-installed native libraries (libvips, libjpeg-turbo, …) are
+# visible to venvs created from non-Homebrew Python interpreters (e.g. miniconda).
+export DYLD_LIBRARY_PATH="/opt/homebrew/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+
 DATA_DIR=$1
 NUM_IMAGES=${2:-2000}
 NUM_RUNS=${3:-20}
+MODE=${4:-memory}
+VENV_DIR="venvs"
 
-echo "Starting benchmarks with:"
-echo "  Image directory: $DATA_DIR"
+mkdir -p "$VENV_DIR" output
+
+# All libraries (macOS ARM64 compatible).
+# jpeg4py and pillow-simd are Linux-only and intentionally excluded.
+ALL_LIBRARIES=(
+    "opencv"
+    "pillow"
+    "skimage"
+    "imageio"
+    "torchvision"
+    "tensorflow"
+    "kornia"
+    "simplejpeg"
+    "turbojpeg"
+    "imagecodecs"
+    "pyvips"
+)
+
+# Pre-flight: warn about missing brew deps that pip cannot provide.
+check_brew_deps() {
+    local missing=()
+    if ! brew list --formula jpeg-turbo &>/dev/null 2>&1; then
+        missing+=("jpeg-turbo  # needed by simplejpeg, turbojpeg")
+    fi
+    if ! brew list --formula vips &>/dev/null 2>&1; then
+        missing+=("vips        # needed by pyvips")
+    fi
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "WARNING: the following brew packages are not installed."
+        echo "The libraries that depend on them will be skipped."
+        echo ""
+        for dep in "${missing[@]}"; do
+            echo "  brew install $dep"
+        done
+        echo ""
+    fi
+}
+
+setup_venv() {
+    local lib=$1
+    echo "=== Setting up environment for $lib ==="
+    uv venv "$VENV_DIR/$lib" --python python3 --seed
+    # shellcheck source=/dev/null
+    source "$VENV_DIR/$lib/bin/activate"
+    export UV_LINK_MODE=copy
+    uv pip install -r requirements/base.txt
+    uv pip install -r "requirements/$lib.txt"
+    # Install the benchmark package so imread_benchmark is importable
+    uv pip install -e . --no-deps
+}
+
+run_benchmark() {
+    local lib=$1
+    local num_threads=$2  # 0 = library default, 1 = single-threaded
+    export BENCHMARK_LIBRARY=$lib
+    python imread_benchmark/benchmark_single.py \
+        --data-dir "$DATA_DIR" \
+        --num-images "$NUM_IMAGES" \
+        --num-runs "$NUM_RUNS" \
+        --output-dir output \
+        --mode "$MODE" \
+        --num-threads "$num_threads"
+}
+
+echo "Starting benchmarks"
+echo "  Image directory : $DATA_DIR"
 echo "  Number of images: $NUM_IMAGES"
-echo "  Number of runs: $NUM_RUNS"
+echo "  Number of runs  : $NUM_RUNS"
+echo "  Mode            : $MODE"
 echo
 
-# Run benchmarks for each library
-for lib in $(get_libraries); do
+check_brew_deps
+
+FAILED=()
+
+get_default_threads() {
+    local lib=$1
+    BENCHMARK_LIBRARY=$lib python - <<'EOF'
+import os
+from imread_benchmark.decoders import REGISTRY
+lib = os.environ["BENCHMARK_LIBRARY"]
+decoder = REGISTRY[lib]()
+print(decoder.get_num_threads())
+EOF
+}
+
+for lib in "${ALL_LIBRARIES[@]}"; do
     echo "Processing $lib..."
-    setup_venv "$lib"
-    run_benchmark "$lib"
-    deactivate
-    echo "Completed $lib"
+    if ! setup_venv "$lib"; then
+        echo "WARNING: environment setup failed for $lib — skipping"
+        FAILED+=("$lib (setup failed)")
+        deactivate 2>/dev/null || true
+        echo
+        continue
+    fi
+
+    # Single-threaded run (always)
+    echo "  [1 thread]"
+    if ! run_benchmark "$lib" 1; then
+        echo "WARNING: single-thread benchmark failed for $lib"
+        FAILED+=("$lib (1-thread run failed)")
+        deactivate 2>/dev/null || true
+        echo
+        continue
+    fi
+    echo "  Completed $lib (1 thread)"
+
+    # Default-threads run — skip if library is inherently single-threaded
+    default_threads=$(get_default_threads "$lib")
+    if [ "$default_threads" -le 1 ]; then
+        echo "  [default threads = 1, copying 1t result — no second run needed]"
+        system_id=$(BENCHMARK_LIBRARY="$lib" python -c "from imread_benchmark.utils import get_system_identifier; print(get_system_identifier())")
+        src="output/${system_id}/${lib}_1t_results.json"
+        dst="output/${system_id}/${lib}_${default_threads}t_results.json"
+        # src and dst are the same filename when default_threads==1, nothing to do
+        [ "$src" != "$dst" ] && cp "$src" "$dst"
+    else
+        echo "  [library default: $default_threads threads]"
+        if ! run_benchmark "$lib" 0; then
+            echo "WARNING: default-thread benchmark failed for $lib"
+            FAILED+=("$lib (default-thread run failed)")
+        else
+            echo "  Completed $lib ($default_threads threads)"
+        fi
+    fi
+
+    deactivate 2>/dev/null || true
     echo
 done
 
 echo "All benchmarks completed!"
-echo "Results are saved in the output directory organized by operating system."
-echo "Check output/$(uname -s | tr '[:upper:]' '[:lower:]')/ for results."
+echo "Results saved in output/"
+
+if [ ${#FAILED[@]} -gt 0 ]; then
+    echo ""
+    echo "The following libraries were skipped:"
+    for f in "${FAILED[@]}"; do
+        echo "  - $f"
+    done
+fi

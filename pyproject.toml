@@ -1,39 +1,44 @@
-# NOTE: you have to use single-quoted strings in TOML for regular expressions.
-# It's the equivalent of r-strings in Python.  Multiline strings are treated as
-# verbose regular expressions by Black.  Use [ ] to denote a significant space
-# character.
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatchling" ]
 
-[tool.black]
-line-length = 120
-target-version = [
-  "py312",
+[project]
+name = "imread-benchmark"
+version = "0.2.0"
+requires-python = ">=3.11"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-  | node_modules
-  setup.py
-)/
-'''
+dependencies = [
+  "numpy",
+  "pandas",
+  "py-cpuinfo",
+  "tqdm",
+]
+optional-dependencies.dev = [
+  "pillow",
+  "pre-commit>=3.5",
+  "pytest>=8",
+]
+
+[tool.hatch]
+build.targets.wheel.packages = [ "imread_benchmark" ]
+
+[tool.uv]
+dev-dependencies = [
+  "pillow",
+  "pre-commit>=3.5.0",
+  "pytest>=8.0",
+]
 
 [tool.ruff]
-target-version = "py312"
-
-# Same as Black.
+target-version = "py311"
 line-length = 120
 indent-width = 4
-
-# Exclude a variety of commonly ignored directories.
 exclude = [
   ".bzr",
   ".direnv",
@@ -55,63 +60,58 @@ exclude = [
   ".vscode",
   "__pypackages__",
   "_build",
-  "benchmark",
   "buck-out",
   "build",
   "dist",
   "node_modules",
   "site-packages",
-  "tests",
   "venv",
+  "venvs",
 ]
-
-# Like Black, indent with spaces, rather than tabs.
 format.indent-style = "space"
-# Like Black, use double quotes for strings.
 format.quote-style = "double"
-# Like Black, automatically detect the appropriate line ending.
 format.line-ending = "auto"
-# Like Black, respect magic trailing commas.
 format.skip-magic-trailing-comma = false
-lint.select = [
-  "ALL",
-]
+lint.select = [ "ALL" ]
 lint.ignore = [
   "ANN001",
   "ANN201",
   "ANN202",
+  "ANN401",
+  "B027",
   "BLE001",
   "C901",
   "D100",
   "D101",
+  "D102",
   "D103",
   "D104",
+  "D105",
+  "D107",
   "D203",
+  "D205",
   "D212",
   "EM101",
   "EM102",
   "FBT003",
   "G004",
   "N812",
-  "PD901",
+  "PLC0415",
   "PLR2004",
+  "PLW0603",
   "T201",
+  "TC002",
+  "TC003",
   "TRY003",
 ]
-
 lint.explicit-preview-rules = true
-# Allow fix for all enabled rules (when `--fix`) is provided.
-lint.fixable = [
-  "ALL",
-]
-lint.unfixable = [
-]
-
-# Allow unused variables when underscore-prefixed.
+lint.per-file-ignores."tests/**" = [ "ARG", "NPY002", "S101" ]
+lint.fixable = [ "ALL" ]
+lint.unfixable = []
 lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true
@@ -119,6 +119,7 @@ warn_unused_ignores = true
 disallow_any_generics = true
 check_untyped_defs = true
 no_implicit_reexport = true
-
-# for strict mypy: (this is the tricky one :-) )
 disallow_untyped_defs = true
+
+[tool.pytest]
+ini_options.testpaths = [ "tests" ]
