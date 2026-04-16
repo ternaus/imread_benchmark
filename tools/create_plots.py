@@ -147,10 +147,13 @@ def main() -> None:
     # Load and process data
     df = load_results("output")
 
-    # Create visualizations
+    # Plots are written under gitignored `_internal/plots/` (see CONTRIBUTING.md).
+    out_dir = Path("_internal/plots")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     # Create separate plots for each platform
-    plot_platform_performance(df, "darwin", "performance_darwin.png")
-    plot_platform_performance(df, "linux", "performance_linux.png")
+    plot_platform_performance(df, "darwin", out_dir / "performance_darwin.png")
+    plot_platform_performance(df, "linux", out_dir / "performance_linux.png")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,16 @@ pip install uv
 uv sync --extra dev
 ```
 
+## Local-only material (`_internal/`)
+
+The `_internal/` directory is **gitignored**. Keep drafts, papers, regenerated plots, PDFs, and scratch assets there — for example:
+
+- `_internal/papers/paper.md` — arXiv / manuscript drafts (do not add `paper.md` at repo root)
+- `_internal/plots/` — figures from `tools/create_plots.py` (default output directory)
+- `_internal/assets/` — sample images, posters, one-off binaries
+
+Nothing under `_internal/` is tracked by git.
+
 ## Running tests
 
 ```bash

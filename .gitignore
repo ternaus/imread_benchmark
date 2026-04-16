@@ -110,3 +110,15 @@ venv.bak/
 .ruff_cache/
 
 venvs/
+
+# Local-only drafts, papers, plots, and bulky assets (never commit)
+_internal/
+
+# Generated plots / sample images at repository root
+/*.png
+/*.jpg
+/*.jpeg
+/*.pdf
+
+# Legacy plot output directory (plots go under `_internal/plots/` via tools/create_plots.py)
+/images/
