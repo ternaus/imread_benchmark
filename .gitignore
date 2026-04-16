@@ -113,6 +113,7 @@ venvs/
 
 # Local-only drafts, papers, plots, and bulky assets (never commit)
 _internal/
+/paper.md
 
 # Generated plots / sample images at repository root
 /*.png
