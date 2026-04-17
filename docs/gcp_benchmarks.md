@@ -21,17 +21,32 @@ gcloud config set project YOUR_GCP_PROJECT_ID
 
 Do this once. Every subsequent benchmark run pulls from GCS — no local upload per run.
 
+**Recommended: upload as a single tarball.** Per-file downloads on the VM bottleneck on
+GCS small-file API overhead (~50 ms × 50,000 files = 40+ min); a single 5.5 GB tarball
+pulls in ~30 sec at same-region GCS bandwidth and is then untarred locally.
+
+```bash
+cd ~/data/imagenet            # parent of the val/ directory
+tar -cf val.tar val/
+gcloud storage cp val.tar gs://my-bucket/imagenet/val.tar
+```
+
+`vm_startup.sh` auto-detects `<imagenet-bucket>.tar` and uses the fast path. For
+smoke runs (`--smoke`, `--num-images 200`) it untars everything and trims down to N
+locally — still faster than per-file fetching even though most of the tarball is
+discarded, because hyperdisk-balanced extraction is essentially free.
+
+**Fallback: per-file directory upload** (kept working for existing buckets that
+predate the tarball convention):
+
 ```bash
 ./gcp/run.sh \
-  --upload-imagenet ~/imagenet/val \
+  --upload-imagenet ~/data/imagenet/val \
   --imagenet-bucket gs://my-bucket/imagenet/val
 ```
 
-Replace `gs://my-bucket/imagenet/val` with your actual bucket path.
-The upload is ~6.3 GB and takes a few minutes depending on your connection.
-
-This uses `gcloud storage cp --recursive` (not `gsutil`), which avoids Google’s
-deprecation warning and the macOS multiprocessing quirk with `gsutil -m`.
+If both `<bucket>/` (per-file dir) and `<bucket>.tar` (single tarball) exist, the
+tarball wins. To force the slow path for testing, rename or delete the tarball.
 
 ---
 

@@ -228,29 +228,71 @@ echo "[step 3] Done. Contents:"
 ls -1
 
 # ── ImageNet ───────────────────────────────────────────────────────────────────
-# Only fetch the N images we actually need. Saves ~5-10 min and several GB
-# on smoke runs (e.g. 2k images instead of 50k). For full 50k runs this is
-# the same volume as a recursive copy but parallelized via `gcloud storage cp -I`.
+# Two paths, auto-selected:
+#
+#   FAST: tarball at "<bucket>.tar" exists → download single 5.5 GB blob
+#         + tar -xf locally. ~30 sec for any NUM_IMAGES, since tiny-file API
+#         overhead (50k × 50 ms = 40+ min) is replaced by one big sequential
+#         GET (5.5 GB at same-region GCS bandwidth = a few seconds).
+#
+#   SLOW: per-file `gcloud storage cp -I` over the listed objects.
+#         Kept as fallback for buckets that don't have a tarball, and
+#         instinctively the "right" code path for partial downloads.
+#
+# Build the tarball once with:
+#   tar -cf val.tar -C ~/data/imagenet val
+#   gcloud storage cp val.tar gs://<bucket>/path/imagenet/val.tar
+# (See docs/gcp_benchmarks.md.)
 echo
-echo "[step 4] Downloading $NUM_IMAGES images from $IMAGENET_BUCKET ..."
+echo "[step 4] Materializing $NUM_IMAGES images at /data/imagenet/val ..."
 IMAGENET_DIR=/data/imagenet/val
-mkdir -p "$IMAGENET_DIR"
+IMAGENET_PARENT=$(dirname "$IMAGENET_DIR")
+mkdir -p "$IMAGENET_PARENT"
 
-# Strip any trailing slash from the bucket path so `**` glob behaves consistently.
 BUCKET_PREFIX="${IMAGENET_BUCKET%/}"
+TAR_PATH="${BUCKET_PREFIX}.tar"
 
-# Materialize the full sorted list to disk first, THEN take the first N.
-# Doing `... | sort | head -n N` would SIGPIPE upstream stages once head
-# closes stdin; with `set -o pipefail` that kills the whole script (exit 141).
-gcloud --quiet storage ls "$BUCKET_PREFIX/**" \
-    | grep -Ei '\.(jpe?g)$' \
-    | sort > /tmp/imagenet_all.txt
-head -n "$NUM_IMAGES" /tmp/imagenet_all.txt > /tmp/imagenet_files.txt
+if gcloud storage objects describe "$TAR_PATH" >/dev/null 2>&1; then
+    echo "  Fast path: $TAR_PATH"
+    # 2-step (cp + tar) instead of `cat | tar`. The streamed pipe variant
+    # works but `gcloud storage cat` of a multi-GB blob is less robust on
+    # transient TCP resets; the cp+tar combo is bulletproof and only adds
+    # ~5 sec of extra disk I/O on hyperdisk-balanced.
+    rm -rf "$IMAGENET_DIR"
+    time gcloud --quiet storage cp "$TAR_PATH" /tmp/val.tar
+    echo "  Tarball size: $(du -h /tmp/val.tar | cut -f1)"
+    time tar -xf /tmp/val.tar -C "$IMAGENET_PARENT"
+    rm -f /tmp/val.tar
 
-WANTED=$(wc -l < /tmp/imagenet_files.txt)
-echo "  Selected $WANTED files; downloading in parallel..."
-# `-I` reads source URIs from stdin; gcloud parallelizes downloads internally.
-time gcloud --quiet storage cp -I "$IMAGENET_DIR/" < /tmp/imagenet_files.txt
+    # Trim down to NUM_IMAGES for smoke runs. Sort + head + delete the rest
+    # is faster than copying selected files to a new dir (~50k unlinks vs.
+    # 50k copies + 50k unlinks). `-z` keeps us safe for filenames with newlines.
+    TOTAL=$(find "$IMAGENET_DIR" -maxdepth 1 \( -iname '*.jpg' -o -iname '*.jpeg' \) | wc -l)
+    if [[ "$NUM_IMAGES" -lt "$TOTAL" ]]; then
+        echo "  Trimming $TOTAL → $NUM_IMAGES (smoke / partial run)..."
+        find "$IMAGENET_DIR" -maxdepth 1 \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0 \
+            | sort -z \
+            | tail -zn +"$((NUM_IMAGES + 1))" \
+            | xargs -0 -r rm -f
+    fi
+else
+    echo "  Slow path: per-file download (no tarball at $TAR_PATH)."
+    echo "  Build one to skip this: tar -cf val.tar val/ && gcloud storage cp val.tar $TAR_PATH"
+    mkdir -p "$IMAGENET_DIR"
+
+    # Materialize the full sorted list to disk first, THEN take the first N.
+    # Doing `... | sort | head -n N` would SIGPIPE upstream stages once head
+    # closes stdin; with `set -o pipefail` that kills the whole script (exit 141).
+    gcloud --quiet storage ls "$BUCKET_PREFIX/**" \
+        | grep -Ei '\.(jpe?g)$' \
+        | sort > /tmp/imagenet_all.txt
+    head -n "$NUM_IMAGES" /tmp/imagenet_all.txt > /tmp/imagenet_files.txt
+
+    WANTED=$(wc -l < /tmp/imagenet_files.txt)
+    echo "  Selected $WANTED files; downloading in parallel..."
+    # `-I` reads source URIs from stdin; gcloud parallelizes downloads internally.
+    time gcloud --quiet storage cp -I "$IMAGENET_DIR/" < /tmp/imagenet_files.txt
+fi
 
 IMAGE_COUNT=$(find "$IMAGENET_DIR" -maxdepth 1 \( -iname '*.jpg' -o -iname '*.jpeg' \) | wc -l)
 echo "[step 4] Done. $IMAGE_COUNT JPEGs in $IMAGENET_DIR"
