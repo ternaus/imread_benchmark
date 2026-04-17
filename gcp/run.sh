@@ -134,7 +134,7 @@ STARTUP_SCRIPT="$SCRIPT_DIR/vm_startup.sh"
 
 # Sibling cache bucket: same parent as the results bucket, but suffix `-cache`
 # so it lives next to per-run artifacts without polluting them. Pre-built
-# venvs land here keyed by (os, arch, hash-of-requirements).
+# venvs land here keyed by (os, arch, hash-of-pyproject+uv.lock).
 # Override with CACHE_BUCKET env var if you want a separate bucket.
 CACHE_BUCKET_DEFAULT="${RESULTS_BUCKET%/*}/imread-cache"
 CACHE_BUCKET="${CACHE_BUCKET:-$CACHE_BUCKET_DEFAULT}"
@@ -157,19 +157,29 @@ echo
 
 # ── Pack and upload repo ──────────────────────────────────────────────────────
 echo "[1/4] Packing repo..."
-REPO_TARBALL=$(mktemp /tmp/imread-repo-XXXXXX.tar.gz)
+# BSD mktemp (macOS) only substitutes X's that are at the very END of the
+# template. Passing `/tmp/imread-repo-XXXXXX.tar.gz` creates the LITERAL file,
+# which then collides on the next run. Use a temp dir + fixed filename — the
+# dir name is randomised, the contained filename can be anything we want.
+REPO_TMPDIR=$(mktemp -d -t imread-repo.XXXXXX)
+REPO_TARBALL="$REPO_TMPDIR/repo.tar.gz"
+trap 'rm -rf "$REPO_TMPDIR"' EXIT
 cd "$REPO_ROOT"
 # Capture working tree (committed + uncommitted + untracked-but-not-ignored)
 # while excluding artifacts that aren't needed at run time.
 # Listing files via git keeps us in sync with .gitignore for untracked files.
+# The `[ -e "$f" ]` filter drops files that git still tracks but have been
+# deleted-and-not-yet-committed locally — without it, tar bails out with
+# "Cannot stat" the moment any tracked file is removed.
 { git ls-files; git ls-files --others --exclude-standard; } \
     | grep -vE '^(output|gcp|docs|_internal|paper.*)/' \
+    | while IFS= read -r f; do [ -e "$f" ] && printf '%s\n' "$f"; done \
     | tar -czf "$REPO_TARBALL" -T -
 
 echo "[1/4] Uploading repo + startup script to GCS..."
 gcloud --quiet storage cp "$REPO_TARBALL" "$RUN_GCS/repo.tar.gz"
 gcloud --quiet storage cp "$STARTUP_SCRIPT" "$RUN_GCS/vm_startup.sh"
-rm -f "$REPO_TARBALL"
+# Tarball is in $REPO_TMPDIR which the EXIT trap nukes. No manual rm needed.
 echo "[1/4] Done."
 
 # ── Auto-detect arch + disk type from machine type ────────────────────────────

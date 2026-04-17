@@ -49,42 +49,36 @@ brew install vips         # required by pyvips (NOT bundled in the pip wheel)
 # Install uv if needed
 pip install uv
 
-# Install the package in editable mode with dev dependencies
-uv sync --extra dev
+# Install the orchestrator (control-plane) into a venv.
+# Per-library worker venvs (mainstream / tensorflow / pillow-simd) are
+# created lazily on first run, with the right libjpeg-turbo / libvips deps.
+uv venv && source .venv/bin/activate
+uv pip install -e .
 ```
 
 ## Running the Benchmark
 
 ```bash
-# Make executable (first time)
-chmod +x run_benchmarks.sh
+# What would run on this machine?
+imread-benchmark list-libs
 
-# Show help
-./run_benchmarks.sh --help
+# Single + DataLoader for every supported decoder, default 50k images
+imread-benchmark run --data-dir /path/to/imagenet/val
 
-# Run all libraries — memory mode, 2000 images, 20 timed runs
-./run_benchmarks.sh /path/to/imagenet/val
+# Faster smoke run
+imread-benchmark run --data-dir /path/to/imagenet/val \
+    --num-images 2000 --num-runs 5 --dataloader-runs 2 \
+    --workers 0,2
 
-# Custom settings
-./run_benchmarks.sh /path/to/imagenet/val 2000 20 memory
+# Just one library, single-thread benchmark only
+imread-benchmark run --data-dir /path/to/imagenet/val \
+    --libs opencv --mode single
 
-# Single library
-BENCHMARK_LIBRARY=opencv python imread_benchmark/benchmark_single.py \
-    --data-dir /path/to/imagenet/val \
-    --output-dir output \
-    --mode memory
+# Generate plots from output/ JSONs
+imread-benchmark plot --input output --output _internal/plots
 ```
 
-## DataLoader Benchmark
-
-Measures throughput inside a PyTorch DataLoader with varying worker counts — the most relevant metric for ML training pipelines.
-
-```bash
-BENCHMARK_LIBRARY=opencv python imread_benchmark/benchmark_dataloader.py \
-    --data-dir /path/to/imagenet/val \
-    --output-dir output \
-    --workers 0 1 2 4 8
-```
+The CLI sets up `venvs/<group>/` for each dependency group it needs. Subsequent runs reuse those venvs, so only the first invocation pays the install cost.
 
 ## Results Structure
 

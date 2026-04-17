@@ -180,8 +180,8 @@ gcloud config set project YOUR_PROJECT_ID
 
 **A library failed but others succeeded**
 
-`run_benchmarks.sh` skips failed libraries and continues. Results for successful
-libraries are still uploaded. Check the log for `WARNING:` lines.
+`imread-benchmark run` skips failed libraries and continues. Results for successful
+libraries are still uploaded. Check the log for `WARN:` lines.
 
 **Want to cancel a running VM**
 
@@ -192,5 +192,6 @@ gcloud compute instances delete imread-benchmark-TIMESTAMP --zone=us-central1-a 
 
 **Add Linux-only libraries (`jpeg4py`, `pillow-simd`)**
 
-These libraries are not yet in the decoder registry. Once added, `run_benchmarks.sh`
-will automatically run them on Linux. See `imread_benchmark/decoders/` to add them.
+Both are already in the decoder registry. `imread-benchmark run` honors the
+per-decoder platform-skip metadata, so they automatically participate when you
+launch on a matching VM (Linux for jpeg4py, Linux + x86_64 for pillow-simd).

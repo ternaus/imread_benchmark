@@ -73,17 +73,38 @@ REGISTRY = {
 }
 ```
 
-### 3. Add requirements file
+### 3. Add to a dependency group
 
-Create `requirements/foo.txt`:
+In [`pyproject.toml`](pyproject.toml), add the pip distribution name to one of the `[project.optional-dependencies]` groups:
 
+- `mainstream` — coexists with everything else (opencv, skimage, kornia-rs, torch, etc.). Use this unless you have a real conflict.
+- `tensorflow` — only if your library hard-conflicts with torch.
+- `pillow-simd` — only for Pillow forks; reserved for the `pillow-simd` x86 variant itself.
+
+```toml
+mainstream = [
+  "opencv-python-headless",
+  ...
+  "foo-package",                              # platform-agnostic
+  "foo-package; sys_platform == 'linux'",     # Linux only
+]
 ```
-foo-package
+
+Add a platform marker if the wheel doesn't build everywhere.
+
+### 4. Encode platform skips on the class
+
+Nothing else needs editing — `REGISTRY` auto-discovers your decoder and the CLI runs it on every machine that supports it. If your library doesn't run everywhere, set the relevant ClassVars on your decoder:
+
+```python
+class FooDecoder(BaseDecoder):
+    name = "foo"
+    package_name = "foo-package"
+    group = "mainstream"                       # which optional-dependencies group provides it
+    skip_single = [("Darwin", "*")]            # don't run single-thread benchmark on macOS
+    skip_dataloader = [("Linux", "aarch64")]   # don't run inside torch DataLoader on Arm Linux
+    in_dataloader = True                       # set False if it never makes sense in a DataLoader
 ```
-
-### 4. Add to run_benchmarks.sh
-
-Add `"foo"` to `ALL_LIBRARIES` in [`run_benchmarks.sh`](run_benchmarks.sh). If the library is macOS-incompatible, add a filter in `get_libraries()`.
 
 ### 5. Document system deps
 
@@ -95,12 +116,10 @@ If a system library is required (e.g. `brew install something`), add it to the *
 # Tests auto-discover the decoder once it is in REGISTRY and the package is installed
 uv run pytest tests/ -v
 
-# Quick smoke run
-BENCHMARK_LIBRARY=foo python imread_benchmark/benchmark_single.py \
+# Quick smoke run via the orchestrator
+imread-benchmark run --libs foo --mode single \
     --data-dir /path/to/imagenet/val \
-    --output-dir output \
-    --num-images 100 \
-    --num-runs 2
+    --num-images 100 --num-runs 2
 ```
 
 ## Project structure
@@ -123,7 +142,6 @@ tests/
 tools/
 ├── analyze_images.py        # dataset statistics
 └── create_plots.py          # generate performance charts
-requirements/
-├── base.txt                 # shared benchmark deps
-└── <library>.txt            # per-library isolated venv deps
+pyproject.toml               # 3 dependency groups under [project.optional-dependencies]:
+                             #   mainstream / tensorflow / pillow-simd
 ```

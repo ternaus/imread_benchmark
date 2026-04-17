@@ -17,4 +17,6 @@ class KorniaDecoder(BaseDecoder):
     def decode_path(self, path: str) -> np.ndarray:
         import kornia_rs as K
 
-        return K.read_image_jpeg(path)
+        # Newer kornia_rs (>= 0.1.x) requires an explicit colour mode. "rgb"
+        # matches what every other decoder in the suite produces.
+        return K.read_image_jpeg(path, "rgb")

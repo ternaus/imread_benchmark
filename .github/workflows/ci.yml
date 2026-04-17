@@ -43,8 +43,24 @@ jobs:
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install dev dependencies
-        run: uv sync --extra dev --python ${{ matrix.python-version }}
+      # System libs that the wheels in [mainstream] dlopen at import time
+      # (turbojpeg → libturbojpeg, pyvips → libvips). Without these, the
+      # cross-decoder agreement tests silently skip the relevant decoders.
+      # Mirrors `apt-get install` in gcp/vm_startup.sh for parity with cloud runs.
+      - name: Install system C libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libjpeg-turbo8-dev \
+            libturbojpeg0-dev \
+            libvips-dev
+
+      # `--extra mainstream` brings in opencv, skimage, imageio, kornia-rs,
+      # simplejpeg, PyTurboJPEG, imagecodecs, pyvips, Pillow, torch,
+      # torchvision, jpeg4py. With this, the cross-decoder agreement test
+      # actually compares 11 libs instead of just pillow.
+      - name: Install dev + mainstream deps
+        run: uv sync --extra dev --extra mainstream --python ${{ matrix.python-version }}
 
       - name: Run tests
         run: uv run --python ${{ matrix.python-version }} pytest tests/ -v
@@ -58,5 +74,5 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
 
-      - name: Check run_benchmarks.sh
-        run: shellcheck --severity=warning run_benchmarks.sh
+      - name: Check GCP scripts
+        run: shellcheck --severity=warning gcp/*.sh

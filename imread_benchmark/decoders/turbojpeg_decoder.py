@@ -30,4 +30,9 @@ class TurboJPEGDecoder(BaseDecoder):
     package_name = "PyTurboJPEG"
 
     def decode(self, data: bytes) -> np.ndarray:
-        return _get_tj().decode(data)
+        # PyTurboJPEG defaults to BGR. Pass pixel_format=TJPF_RGB so we match
+        # every other decoder in the suite — otherwise the benchmark compares
+        # different colour orders and the paper's numbers become meaningless.
+        from turbojpeg import TJPF_RGB
+
+        return _get_tj().decode(data, pixel_format=TJPF_RGB)

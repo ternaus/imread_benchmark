@@ -17,6 +17,11 @@ class PyVipsDecoder(BaseDecoder):
 
     name = "pyvips"
     package_name = "pyvips"
+    # libvips spawns GLib worker threads at import time. PyTorch's default
+    # `fork` start method on Linux/aarch64 copies the pthread IDs but not the
+    # threads themselves → DataLoader workers hang forever waiting on threads
+    # that don't exist in the child. (Linux x86 + macOS get away with it.)
+    skip_dataloader = (("Linux", "aarch64"),)
 
     def decode(self, data: bytes) -> np.ndarray:
         import pyvips

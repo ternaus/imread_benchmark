@@ -12,6 +12,12 @@ class PillowSIMDDecoder(BaseDecoder):
 
     name = "pillow-simd"
     package_name = "pillow-simd"
+    group = "pillow-simd"
+    # Pillow-SIMD only ships x86 wheels.
+    skip_single = (("Darwin", "*"), ("Linux", "aarch64"), ("Linux", "arm64"))
+    # torchvision's transitive Pillow pin silently downgrades us to vanilla
+    # Pillow inside the same venv; the measurement would be a lie.
+    in_dataloader = False
 
     def decode(self, data: bytes) -> np.ndarray:
         from PIL import Image

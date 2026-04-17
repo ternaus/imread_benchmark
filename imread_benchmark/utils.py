@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import functools
 import logging
 import multiprocessing
-import os
 import platform
 import sys
 from importlib.metadata import PackageNotFoundError, version
@@ -13,31 +13,37 @@ import cpuinfo
 logger = logging.getLogger(__name__)
 
 
-def get_cpu_info() -> dict[str, object]:
+@functools.lru_cache(maxsize=1)
+def _raw_cpuinfo() -> dict[str, object]:
+    # ~100 ms per call; called by both get_cpu_info() and get_system_identifier()
+    # on every benchmark process, so cache it.
     try:
-        info = cpuinfo.get_cpu_info()
-        return {
-            "brand_raw": info.get("brand_raw", "Unknown"),
-            "arch": info.get("arch", "Unknown"),
-            "hz_advertised_raw": info.get("hz_advertised_raw", "Unknown"),
-            "count": multiprocessing.cpu_count(),
-        }
+        return cpuinfo.get_cpu_info()
     except Exception as exc:
         logger.warning("Failed to get CPU info: %s", exc)
         return {"error": str(exc)}
 
 
+def get_cpu_info() -> dict[str, object]:
+    info = _raw_cpuinfo()
+    if "error" in info:
+        return {"error": info["error"]}
+    return {
+        "brand_raw": info.get("brand_raw", "Unknown"),
+        "arch": info.get("arch", "Unknown"),
+        "hz_advertised_raw": info.get("hz_advertised_raw", "Unknown"),
+        "count": multiprocessing.cpu_count(),
+    }
+
+
 def get_system_identifier() -> str:
-    try:
-        info = cpuinfo.get_cpu_info()
-        cpu_brand = info.get("brand_raw", "Unknown")
-        os_id = "darwin" if platform.system().lower() == "darwin" else "linux"
-        cpu_id = cpu_brand.replace(" ", "-")
-    except Exception as exc:
-        logger.warning("Failed to get system info: %s", exc)
+    info = _raw_cpuinfo()
+    if "error" in info:
         return "unknown-system"
-    else:
-        return f"{os_id}_{cpu_id}"
+    cpu_brand = str(info.get("brand_raw", "Unknown"))
+    os_id = "darwin" if platform.system().lower() == "darwin" else "linux"
+    cpu_id = cpu_brand.replace(" ", "-")
+    return f"{os_id}_{cpu_id}"
 
 
 def get_package_versions(library_name: str | None = None) -> dict[str, object]:
@@ -48,9 +54,6 @@ def get_package_versions(library_name: str | None = None) -> dict[str, object]:
         "Machine": platform.machine(),
         "CPU": get_cpu_info(),
     }
-
-    if library_name is None:
-        library_name = os.environ.get("BENCHMARK_LIBRARY")
 
     if library_name:
         from imread_benchmark.decoders import REGISTRY

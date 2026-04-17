@@ -8,6 +8,10 @@ from imread_benchmark.decoders import BaseDecoder
 class TensorFlowDecoder(BaseDecoder):
     name = "tensorflow"
     package_name = "tensorflow"
+    group = "tensorflow"
+    # tf + torch in one venv = numpy/protobuf pin war. And nobody wires
+    # tf.io.decode_jpeg into a torch DataLoader anyway (use tf.data instead).
+    in_dataloader = False
 
     def decode(self, data: bytes) -> np.ndarray:
         import tensorflow as tf

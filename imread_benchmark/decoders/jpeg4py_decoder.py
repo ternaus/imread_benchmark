@@ -21,6 +21,8 @@ class Jpeg4pyDecoder(BaseDecoder):
 
     name = "jpeg4py"
     package_name = "jpeg4py"
+    skip_single = (("Darwin", "*"), ("Windows", "*"))
+    skip_dataloader = (("Darwin", "*"), ("Windows", "*"))
 
     def decode(self, data: bytes) -> np.ndarray:
         # jpeg4py.JPEG accepts either a filename or a uint8 numpy buffer.

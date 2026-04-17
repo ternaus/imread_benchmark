@@ -174,16 +174,18 @@ echo "[step 4] Done. $IMAGE_COUNT JPEGs in $IMAGENET_DIR"
 
 # ── Venv cache pull ────────────────────────────────────────────────────────────
 # Skip the ~25-min `uv pip install` × 11 libs by pulling pre-built venvs from
-# GCS, keyed by (os, arch, hash-of-requirements). Cache is populated at the
-# end of a successful run, so the first run on a new (machine_arch, requirements)
-# combo is full-cost; every subsequent run reuses it in seconds.
+# GCS, keyed by (os, arch, hash-of-pyproject+uv.lock). Cache is populated at the
+# end of a successful run, so the first run on a new (machine_arch, deps) combo
+# is full-cost; every subsequent run reuses it in seconds.
 echo
 echo "[cache] Computing venv cache key..."
 CACHE_HIT=false
 
 if [[ -n "$CACHE_BUCKET" ]]; then
     # Hash anything that affects the resolved venv contents.
-    REQ_HASH=$(cat requirements/*.txt pyproject.toml 2>/dev/null \
+    # uv.lock captures the full resolved set; pyproject.toml captures extras
+    # + index config. Together they uniquely identify what venvs/ should look like.
+    REQ_HASH=$(cat pyproject.toml uv.lock 2>/dev/null \
                | sha256sum | cut -c1-12)
     CACHE_KEY="venvs-$(uname -s)-$(uname -m)-${REQ_HASH}.tar.zst"
     CACHE_PATH="${CACHE_BUCKET%/}/${CACHE_KEY}"
@@ -204,21 +206,42 @@ else
     echo "[cache] DISABLED (no cache-bucket metadata)"
 fi
 
-# ── Single-thread + default-thread benchmarks ──────────────────────────────────
+# ── Control-plane venv (just to get the `imread-benchmark` CLI) ────────────────
+# A small venv (numpy + pandas + typer) that drives the per-group worker venvs.
+# Worker venvs (mainstream/tensorflow/pillow-simd) are created lazily by the CLI.
+# Idempotent: cached `venvs/control/` from a previous run is reused as-is, since
+# `uv pip install -e .` is fast on a populated venv and picks up any code changes.
 echo
-echo "[step 5] Running single/default-thread benchmarks..."
-echo "         NUM_IMAGES=$NUM_IMAGES  NUM_RUNS=$NUM_RUNS  MODE=memory"
-chmod +x run_benchmarks.sh
-./run_benchmarks.sh "$IMAGENET_DIR" "$NUM_IMAGES" "$NUM_RUNS" memory
+echo "[step 5] Setting up control-plane venv..."
+if [[ ! -x venvs/control/bin/python ]]; then
+    uv venv venvs/control --python python3 --seed
+fi
+# shellcheck source=/dev/null
+source venvs/control/bin/activate
+UV_LINK_MODE=copy uv pip install -e .
 echo "[step 5] Done."
 
-# ── DataLoader benchmarks ──────────────────────────────────────────────────────
+# ── Run benchmarks via the unified CLI ─────────────────────────────────────────
+# `imread-benchmark run --mode both` orchestrates:
+#   - venv setup per group (mainstream / tensorflow / pillow-simd)
+#   - single + default-thread benchmark for each lib
+#   - DataLoader benchmark for each lib eligible on this platform
+# Platform skips (jpeg4py off macOS, pyvips off Arm-Linux DataLoader, etc.) are
+# encoded on the decoder classes themselves, no shell `case` games.
 echo
-echo "[step 6] Running DataLoader benchmarks..."
-echo "         NUM_IMAGES=$NUM_IMAGES  DL_RUNS=$DL_RUNS  WORKERS=$WORKERS"
-chmod +x run_dataloader_benchmarks.sh
-# shellcheck disable=SC2086  # WORKERS is intentionally word-split into argv
-./run_dataloader_benchmarks.sh "$IMAGENET_DIR" "$NUM_IMAGES" "$DL_RUNS" $WORKERS
+echo "[step 6] Running benchmarks..."
+echo "         NUM_IMAGES=$NUM_IMAGES  NUM_RUNS=$NUM_RUNS  DL_RUNS=$DL_RUNS"
+echo "         WORKERS=$WORKERS"
+WORKERS_CSV=$(echo "$WORKERS" | tr ' ' ',')
+imread-benchmark run \
+    --data-dir "$IMAGENET_DIR" \
+    --output-dir output \
+    --libs all \
+    --mode both \
+    --num-images "$NUM_IMAGES" \
+    --num-runs "$NUM_RUNS" \
+    --dataloader-runs "$DL_RUNS" \
+    --workers "$WORKERS_CSV"
 echo "[step 6] Done."
 
 # ── Upload results ─────────────────────────────────────────────────────────────
@@ -231,7 +254,7 @@ gcloud --quiet storage rsync --recursive output "$RESULTS_BUCKET/output"
 echo "[step 7] Done."
 
 # ── Venv cache push (only on cold-cache run) ───────────────────────────────────
-# Tar venvs/ and upload so the next run on this (os, arch, requirements) combo
+# Tar venvs/ and upload so the next run on this (os, arch, deps) combo
 # can skip ~25 min of `uv pip install`. Skip if we hit the cache (no point
 # re-uploading what we already pulled).
 if [[ -n "$CACHE_BUCKET" && "$CACHE_HIT" != "true" ]]; then
