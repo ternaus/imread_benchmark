@@ -54,26 +54,61 @@ else
     WORKERS=(0 1 2 4 8)
 fi
 
-VENV_DIR="venvs_dataloader"
+# Share venvs/ with run_benchmarks.sh — torch is now in requirements/base.txt
+# so any venv built by the single-thread script can also drive a DataLoader.
+VENV_DIR="venvs"
 mkdir -p "$VENV_DIR" output
 
+# Excluded from DataLoader benchmarks:
+#   tensorflow  — torch + tf in one venv hits numpy/protobuf pin conflicts, and
+#                 nobody uses tf.io.decode_jpeg inside a torch DataLoader in
+#                 practice (they'd use tf.data).
+#   pillow-simd — torchvision's transitive Pillow pin silently downgrades it
+#                 back to vanilla Pillow, so the measurement would be a lie.
 ALL_LIBRARIES=(
     "opencv"
     "pillow"
     "skimage"
     "imageio"
     "torchvision"
-    "tensorflow"
     "kornia"
     "simplejpeg"
     "turbojpeg"
     "imagecodecs"
-    "pyvips"
 )
+
+# pyvips on Arm Linux deadlocks PyTorch's default fork start method:
+# libvips spawns GLib worker threads at import → fork copies the pthread
+# IDs but not the threads → DataLoader workers hang waiting on threads
+# that don't exist in the child. The bug is specific to (Linux + aarch64
+# + fork). It works on:
+#   - x86 Linux (different libvips threadpool init race)
+#   - macOS Arm (Python 3.8+ defaults to spawn, not fork)
+# Switching torch globally to spawn fixes it but slows every library 3-5×.
+# Reported as a finding in the paper instead.
+if ! [[ "$(uname -s)" == "Linux" && "$(uname -m)" == "aarch64" ]]; then
+    ALL_LIBRARIES+=("pyvips")
+fi
+
+# jpeg4py: Linux-only (no Windows/macOS wheels).
+if [[ "$(uname -s)" == "Linux" ]]; then
+    ALL_LIBRARIES+=("jpeg4py")
+fi
 
 setup_venv() {
     local lib=$1
-    echo "=== Setting up DataLoader environment for $lib ==="
+    # Reuse the venv built by run_benchmarks.sh (single-thread). Only torch needs
+    # to be added on top — and only for the libs that go through DataLoader, so
+    # tensorflow/pillow-simd/torchvision venvs never see torch and stay clean.
+    if [[ -f "$VENV_DIR/$lib/bin/activate" ]]; then
+        echo "=== Reusing venv for $lib (adding torch) ==="
+        # shellcheck source=/dev/null
+        source "$VENV_DIR/$lib/bin/activate"
+        export UV_LINK_MODE=copy
+        uv pip install -r requirements/dataloader_base.txt
+        return 0
+    fi
+    echo "=== Setting up environment for $lib ==="
     uv venv "$VENV_DIR/$lib" --python python3 --seed
     # shellcheck source=/dev/null
     source "$VENV_DIR/$lib/bin/activate"

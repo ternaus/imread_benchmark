@@ -19,7 +19,9 @@ dependencies = [
   "py-cpuinfo",
   "tqdm",
 ]
-optional-dependencies.dev = [
+
+[dependency-groups]
+dev = [
   "pillow",
   "pre-commit>=3.5",
   "pytest>=8",
@@ -27,13 +29,6 @@ optional-dependencies.dev = [
 
 [tool.hatch]
 build.targets.wheel.packages = [ "imread_benchmark" ]
-
-[tool.uv]
-dev-dependencies = [
-  "pillow",
-  "pre-commit>=3.5.0",
-  "pytest>=8.0",
-]
 
 [tool.ruff]
 target-version = "py311"

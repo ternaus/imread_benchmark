@@ -29,6 +29,7 @@ class BaseDecoder(ABC):
 # Populated below — import order determines nothing; each entry is the class itself.
 from imread_benchmark.decoders.imagecodecs_decoder import ImageCodecsDecoder  # noqa: E402
 from imread_benchmark.decoders.imageio_decoder import ImageIODecoder  # noqa: E402
+from imread_benchmark.decoders.jpeg4py_decoder import Jpeg4pyDecoder  # noqa: E402
 from imread_benchmark.decoders.kornia_decoder import KorniaDecoder  # noqa: E402
 from imread_benchmark.decoders.opencv_decoder import OpenCVDecoder  # noqa: E402
 from imread_benchmark.decoders.pillow_decoder import PillowDecoder  # noqa: E402
@@ -53,6 +54,7 @@ REGISTRY: dict[str, type[BaseDecoder]] = {
     "turbojpeg": TurboJPEGDecoder,
     "imagecodecs": ImageCodecsDecoder,
     "pyvips": PyVipsDecoder,
+    "jpeg4py": Jpeg4pyDecoder,
 }
 
 __all__ = ["REGISTRY", "BaseDecoder"]

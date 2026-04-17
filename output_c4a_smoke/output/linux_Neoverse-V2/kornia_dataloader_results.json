@@ -1,0 +1,53 @@
+{
+  "library": "kornia",
+  "benchmark_type": "dataloader",
+  "batch_size": 32,
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#10~24.04.1-Ubuntu SMP Thu Mar 19 03:56:00 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-V2",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "kornia": "0.1.10"
+  },
+  "worker_results": [
+    {
+      "num_workers": 0,
+      "images_per_second": "633.20 \u00b1 0.92",
+      "images_per_second_mean": 633.196864280565,
+      "images_per_second_std": 0.918548342780241,
+      "raw_times": [
+        632.2783159377848,
+        634.1154126233453
+      ]
+    },
+    {
+      "num_workers": 2,
+      "images_per_second": "1073.03 \u00b1 68.42",
+      "images_per_second_mean": 1073.0274627932442,
+      "images_per_second_std": 68.41598669764045,
+      "raw_times": [
+        1004.6114760956037,
+        1141.4434494908846
+      ]
+    },
+    {
+      "num_workers": 8,
+      "images_per_second": "1891.82 \u00b1 48.96",
+      "images_per_second_mean": 1891.8237192617712,
+      "images_per_second_std": 48.96331471272242,
+      "raw_times": [
+        1842.8604045490488,
+        1940.7870339744936
+      ]
+    }
+  ],
+  "num_images": 2000,
+  "num_runs": 2
+}

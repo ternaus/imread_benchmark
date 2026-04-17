@@ -1,0 +1,30 @@
+{
+  "library": "imagecodecs",
+  "mode": "memory",
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#10~24.04.1-Ubuntu SMP Thu Mar 19 03:56:00 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-V2",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "imagecodecs": "2026.3.6"
+  },
+  "benchmark_results": {
+    "images_per_second": "670.93 \u00b1 0.06",
+    "images_per_second_mean": 670.9340297750663,
+    "images_per_second_std": 0.0646548983043731,
+    "raw_times": [
+      670.8513474781623,
+      671.0091808650465,
+      670.9415609819897
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 3
+}

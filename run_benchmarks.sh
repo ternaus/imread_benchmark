@@ -56,8 +56,7 @@ VENV_DIR="venvs"
 
 mkdir -p "$VENV_DIR" output
 
-# All libraries (macOS ARM64 compatible).
-# jpeg4py and pillow-simd are Linux-only and intentionally excluded.
+# Cross-platform base set.
 ALL_LIBRARIES=(
     "opencv"
     "pillow"
@@ -71,6 +70,18 @@ ALL_LIBRARIES=(
     "imagecodecs"
     "pyvips"
 )
+
+# Platform-specific additions.
+# jpeg4py: ctypes bindings to libjpeg-turbo, works on any Linux (x86 + Arm).
+# pillow-simd: x86-only fork of Pillow with SSE/AVX intrinsics — won't build on Arm.
+case "$(uname -s)" in
+    Linux)
+        ALL_LIBRARIES+=("jpeg4py")
+        if [[ "$(uname -m)" == "x86_64" ]]; then
+            ALL_LIBRARIES+=("pillow-simd")
+        fi
+        ;;
+esac
 
 # Pre-flight: warn about missing brew deps that pip cannot provide.
 check_brew_deps() {
@@ -94,6 +105,14 @@ check_brew_deps() {
 
 setup_venv() {
     local lib=$1
+    # Reuse a pre-built venv if present (e.g. restored from GCS cache by the
+    # caller). Skips ~2 min of `uv pip install` per library.
+    if [[ -f "$VENV_DIR/$lib/bin/activate" ]]; then
+        echo "=== Reusing existing venv for $lib ==="
+        # shellcheck source=/dev/null
+        source "$VENV_DIR/$lib/bin/activate"
+        return 0
+    fi
     echo "=== Setting up environment for $lib ==="
     uv venv "$VENV_DIR/$lib" --python python3 --seed
     # shellcheck source=/dev/null
@@ -101,7 +120,6 @@ setup_venv() {
     export UV_LINK_MODE=copy
     uv pip install -r requirements/base.txt
     uv pip install -r "requirements/$lib.txt"
-    # Install the benchmark package so imread_benchmark is importable
     uv pip install -e . --no-deps
 }
 

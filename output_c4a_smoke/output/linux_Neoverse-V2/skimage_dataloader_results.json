@@ -1,0 +1,53 @@
+{
+  "library": "skimage",
+  "benchmark_type": "dataloader",
+  "batch_size": 32,
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#10~24.04.1-Ubuntu SMP Thu Mar 19 03:56:00 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-V2",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "skimage": "0.26.0"
+  },
+  "worker_results": [
+    {
+      "num_workers": 0,
+      "images_per_second": "511.98 \u00b1 9.05",
+      "images_per_second_mean": 511.9759828906775,
+      "images_per_second_std": 9.05017326791588,
+      "raw_times": [
+        502.9258096227616,
+        521.0261561585934
+      ]
+    },
+    {
+      "num_workers": 2,
+      "images_per_second": "901.34 \u00b1 33.46",
+      "images_per_second_mean": 901.3449944409435,
+      "images_per_second_std": 33.46116763076128,
+      "raw_times": [
+        867.8838268101823,
+        934.8061620717049
+      ]
+    },
+    {
+      "num_workers": 8,
+      "images_per_second": "2495.42 \u00b1 114.99",
+      "images_per_second_mean": 2495.422364544548,
+      "images_per_second_std": 114.99453070218055,
+      "raw_times": [
+        2380.4278338423674,
+        2610.4168952467285
+      ]
+    }
+  ],
+  "num_images": 2000,
+  "num_runs": 2
+}

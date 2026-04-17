@@ -1,0 +1,30 @@
+{
+  "library": "torchvision",
+  "mode": "memory",
+  "num_threads": 16,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#10~24.04.1-Ubuntu SMP Thu Mar 19 03:56:00 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-V2",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "torchvision": "0.26.0+cpu"
+  },
+  "benchmark_results": {
+    "images_per_second": "654.28 \u00b1 0.32",
+    "images_per_second_mean": 654.2751810276399,
+    "images_per_second_std": 0.32051084215544245,
+    "raw_times": [
+      653.9351665075437,
+      654.185605170938,
+      654.7047714044379
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 3
+}

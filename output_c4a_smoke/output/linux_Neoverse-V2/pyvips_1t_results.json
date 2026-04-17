@@ -1,0 +1,30 @@
+{
+  "library": "pyvips",
+  "mode": "memory",
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#10~24.04.1-Ubuntu SMP Thu Mar 19 03:56:00 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-V2",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "pyvips": "3.1.1"
+  },
+  "benchmark_results": {
+    "images_per_second": "397.50 \u00b1 0.41",
+    "images_per_second_mean": 397.5020128700669,
+    "images_per_second_std": 0.4125266444210401,
+    "raw_times": [
+      397.3837613003256,
+      398.0558908891177,
+      397.06638642075745
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 3
+}

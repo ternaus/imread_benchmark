@@ -1,0 +1,30 @@
+{
+  "library": "jpeg4py",
+  "mode": "memory",
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#10~24.04.1-Ubuntu SMP Thu Mar 19 03:56:00 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-V2",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "jpeg4py": "0.1.4"
+  },
+  "benchmark_results": {
+    "images_per_second": "619.90 \u00b1 0.08",
+    "images_per_second_mean": 619.9030796006759,
+    "images_per_second_std": 0.0797638664083033,
+    "raw_times": [
+      619.824237891257,
+      619.8726334372831,
+      620.0123674734879
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 3
+}

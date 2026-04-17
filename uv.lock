@@ -66,13 +66,6 @@ dependencies = [
     { name = "tqdm" },
 ]
 
-[package.optional-dependencies]
-dev = [
-    { name = "pillow" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "pillow" },
@@ -84,19 +77,15 @@ dev = [
 requires-dist = [
     { name = "numpy" },
     { name = "pandas" },
-    { name = "pillow", marker = "extra == 'dev'" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
     { name = "py-cpuinfo" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "tqdm" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pillow" },
-    { name = "pre-commit", specifier = ">=3.5.0" },
-    { name = "pytest", specifier = ">=8.0" },
+    { name = "pre-commit", specifier = ">=3.5" },
+    { name = "pytest", specifier = ">=8" },
 ]
 
 [[package]]

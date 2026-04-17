@@ -1,0 +1,30 @@
+{
+  "library": "simplejpeg",
+  "mode": "memory",
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#10~24.04.1-Ubuntu SMP Thu Mar 19 03:56:00 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-V2",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "simplejpeg": "1.9.0"
+  },
+  "benchmark_results": {
+    "images_per_second": "671.01 \u00b1 0.05",
+    "images_per_second_mean": 671.0068194568423,
+    "images_per_second_std": 0.046074549660432396,
+    "raw_times": [
+      670.9429294790169,
+      671.049848183379,
+      671.0276807081311
+    ]
+  },
+  "num_images": 2000,
+  "num_runs": 3
+}
