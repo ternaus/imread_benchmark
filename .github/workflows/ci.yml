@@ -45,7 +45,11 @@ jobs:
 
       # System libs the [mainstream] wheels dlopen at import time:
       #   libjpeg-turbo8-dev — jpeg4py (built from sdist, needs headers).
-      #   libturbojpeg0      — PyTurboJPEG (pure-python ctypes, runtime only).
+      #   libturbojpeg0-dev  — provides libturbojpeg.so.0 reliably across
+      #                        Ubuntu releases (noble renamed the runtime-only
+      #                        package to `libturbojpeg`; the `0-dev` name is
+      #                        the transitional metapackage that pulls the
+      #                        correct .so on both jammy and noble).
       # libvips arrives via the `pyvips-binary` PyPI wheel, no apt install.
       # Mirrors gcp/vm_startup.sh for cloud-CI parity.
       - name: Install system C libraries
@@ -53,7 +57,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             libjpeg-turbo8-dev \
-            libturbojpeg0
+            libturbojpeg0-dev
 
       # `--extra mainstream` brings in opencv, skimage, imageio, kornia-rs,
       # simplejpeg, PyTurboJPEG, imagecodecs, pyvips, Pillow, torch,

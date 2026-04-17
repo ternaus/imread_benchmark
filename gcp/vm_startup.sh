@@ -140,8 +140,14 @@ EOF
 # unpacking — indistinguishable from a hang in serial-console triage.
 #
 # Packages:
-#   libjpeg-turbo8-dev — jpeg4py is a Cython extension built from sdist; needs headers.
-#   libturbojpeg0      — runtime only; PyTurboJPEG is pure-Python ctypes, no headers needed.
+#   libjpeg-turbo8-dev  — jpeg4py is a Cython extension built from sdist; needs headers.
+#   libturbojpeg0-dev   — provides libturbojpeg.so.0 + headers (PyTurboJPEG is
+#                         ctypes-only and only needs the .so, but on noble the
+#                         runtime-only package is `libturbojpeg`, not
+#                         `libturbojpeg0`. The `0-dev` name is the transitional
+#                         metapackage that pulls in the right .so reliably
+#                         across Ubuntu releases — costs ~50 KB of headers,
+#                         saves debugging package-rename surprises).
 #   curl/git/python3/zstd — control-plane essentials.
 #
 # We deliberately do NOT install libvips-dev: pyvips reaches libvips through
@@ -150,7 +156,7 @@ EOF
 apt-get update -q || apt-get update -q || true
 apt-get install -y -q \
     libjpeg-turbo8-dev \
-    libturbojpeg0 \
+    libturbojpeg0-dev \
     curl \
     git \
     python3 \
