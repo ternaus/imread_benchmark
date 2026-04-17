@@ -12,7 +12,11 @@ logging.getLogger("pyvips").setLevel(logging.WARNING)
 class PyVipsDecoder(BaseDecoder):
     """
     pyvips — libvips Python bindings.
-    macOS: requires `brew install vips` (libvips is NOT bundled in the pip wheel).
+
+    libvips comes from the `pyvips-binary` PyPI wheel (CFFI API mode), so no
+    `brew install vips` / `apt install libvips-dev` is needed on supported
+    platforms (Linux x86_64 + aarch64 glibc/musl, macOS x86_64 + arm64,
+    Windows). Falls back to the system libvips on anything else.
     """
 
     name = "pyvips"

@@ -43,17 +43,17 @@ jobs:
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      # System libs that the wheels in [mainstream] dlopen at import time
-      # (turbojpeg → libturbojpeg, pyvips → libvips). Without these, the
-      # cross-decoder agreement tests silently skip the relevant decoders.
-      # Mirrors `apt-get install` in gcp/vm_startup.sh for parity with cloud runs.
+      # System libs the [mainstream] wheels dlopen at import time:
+      #   libjpeg-turbo8-dev — jpeg4py (built from sdist, needs headers).
+      #   libturbojpeg0      — PyTurboJPEG (pure-python ctypes, runtime only).
+      # libvips arrives via the `pyvips-binary` PyPI wheel, no apt install.
+      # Mirrors gcp/vm_startup.sh for cloud-CI parity.
       - name: Install system C libraries
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             libjpeg-turbo8-dev \
-            libturbojpeg0-dev \
-            libvips-dev
+            libturbojpeg0
 
       # `--extra mainstream` brings in opencv, skimage, imageio, kornia-rs,
       # simplejpeg, PyTurboJPEG, imagecodecs, pyvips, Pillow, torch,

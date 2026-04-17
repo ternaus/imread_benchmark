@@ -39,9 +39,13 @@ tar -xf ILSVRC2012_img_val.tar -C imagenet/val
 ## System Requirements (macOS)
 
 ```bash
-brew install jpeg-turbo   # required by simplejpeg and turbojpeg
-brew install vips         # required by pyvips (NOT bundled in the pip wheel)
+brew install jpeg-turbo   # required by PyTurboJPEG (pure-python ctypes binding)
 ```
+
+`pyvips` ships its own bundled libvips via the `pyvips-binary` PyPI wheel,
+so no `brew install vips` is needed. `simplejpeg` wheels bundle libjpeg-turbo.
+On Linux you'll still need `apt install libjpeg-turbo8-dev libturbojpeg0`
+(see `gcp/vm_startup.sh`), since `jpeg4py` is built from sdist.
 
 ## Installation
 

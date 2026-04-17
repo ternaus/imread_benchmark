@@ -118,11 +118,23 @@ done
 
 # Run apt without piping through tail — pipefail would mask the real error.
 # Retry update once in case of transient mirror flake.
-apt-get update -qq || apt-get update -qq
-apt-get install -y -qq \
+#
+# Use `-q` (one q) instead of `-qq` so per-package install lines stream to the
+# log. With `-qq` the VM looks frozen for 1-3 min while dpkg is silently
+# unpacking — indistinguishable from a hang in serial-console triage.
+#
+# Packages:
+#   libjpeg-turbo8-dev — jpeg4py is a Cython extension built from sdist; needs headers.
+#   libturbojpeg0      — runtime only; PyTurboJPEG is pure-Python ctypes, no headers needed.
+#   curl/git/python3/zstd — control-plane essentials.
+#
+# We deliberately do NOT install libvips-dev: pyvips reaches libvips through
+# the `pyvips-binary` PyPI wheel (CFFI API mode), bundled libvips + deps.
+# Saves ~150 transitive packages and 1-3 min of apt time per cold boot.
+apt-get update -q || apt-get update -q
+apt-get install -y -q \
     libjpeg-turbo8-dev \
-    libturbojpeg0-dev \
-    libvips-dev \
+    libturbojpeg0 \
     curl \
     git \
     python3 \

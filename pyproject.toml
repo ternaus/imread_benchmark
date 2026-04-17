@@ -34,6 +34,10 @@ optional-dependencies.mainstream = [
   "pillow",
   "pyturbojpeg<2",
   "pyvips",
+  # Bundled libvips wheels (Linux x86/arm + macOS x86/arm + Windows). Lets
+  # pyvips run in CFFI API mode without `apt install libvips-dev` /
+  # `brew install vips`, killing ~150 packages of GLib/GTK closure on the VM.
+  "pyvips-binary>=8.18",
   "scikit-image",
   "simplejpeg",
   "torch",
