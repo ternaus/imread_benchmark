@@ -22,6 +22,9 @@
 #   --force-rebuild    bypass cache LOOKUP and reupload a fresh tarball.
 #                      Use to re-resolve PyPI without editing uv.lock — picks up
 #                      newly released wheel versions of every cached library.
+#   --keep-on-failure  keep the VM alive on ERR (instead of self-deleting) so
+#                      you can SSH in and triage. Default: self-delete on any
+#                      failure to avoid surprise billing on a stuck VM.
 #   --upload-imagenet  path/to/local/imagenet/val   one-time upload to --imagenet-bucket, then exit
 #
 # Examples:
@@ -59,6 +62,7 @@ NO_WAIT=false
 SMOKE=false
 NO_CACHE=false
 FORCE_REBUILD=false
+KEEP_ON_FAILURE=false
 UPLOAD_IMAGENET_LOCAL=""
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -76,9 +80,10 @@ while [[ $# -gt 0 ]]; do
         --smoke)             SMOKE=true;                shift   ;;
         --no-cache)          NO_CACHE=true;             shift   ;;
         --force-rebuild)     FORCE_REBUILD=true;        shift   ;;
+        --keep-on-failure)   KEEP_ON_FAILURE=true;      shift   ;;
         --upload-imagenet)   UPLOAD_IMAGENET_LOCAL="$2"; shift 2 ;;
         -h|--help)
-            sed -n '2,42p' "$0" | sed 's/^# \?//'
+            sed -n '2,45p' "$0" | sed 's/^# \?//'
             exit 0
             ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
@@ -157,7 +162,8 @@ echo "  Single runs  : $NUM_RUNS"
 echo "  DataLoader   : $DL_RUNS runs × workers=[$WORKERS]"
 [[ "$SMOKE" == "true" ]]         && echo "  Mode         : SMOKE TEST"
 [[ -n "$CACHE_BUCKET" ]]         && echo "  Venv cache   : $CACHE_BUCKET" || echo "  Venv cache   : DISABLED"
-[[ "$FORCE_REBUILD" == "true" ]] && echo "  Cache lookup : SKIPPED (--force-rebuild → fresh resolve, then re-upload)"
+[[ "$FORCE_REBUILD" == "true" ]]   && echo "  Cache lookup : SKIPPED (--force-rebuild → fresh resolve, then re-upload)"
+[[ "$KEEP_ON_FAILURE" == "true" ]] && echo "  On failure   : KEEP VM (--keep-on-failure → manual cleanup required)"
 echo "  Live log     : gcloud storage cat $RUN_GCS/startup.log"
 echo "══════════════════════════════════════════════════════"
 echo
@@ -221,7 +227,7 @@ gcloud compute instances create "$RUN_NAME" \
     --image-project=ubuntu-os-cloud \
     --boot-disk-size=60GB \
     --boot-disk-type="$BOOT_DISK_TYPE" \
-    --metadata="results-bucket=$RUN_GCS,imagenet-bucket=$IMAGENET_BUCKET,num-images=$NUM_IMAGES,num-runs=$NUM_RUNS,dl-runs=$DL_RUNS,workers=$WORKERS,repo-tarball=$RUN_GCS/repo.tar.gz,cache-bucket=$CACHE_BUCKET,force-rebuild=$FORCE_REBUILD" \
+    --metadata="results-bucket=$RUN_GCS,imagenet-bucket=$IMAGENET_BUCKET,num-images=$NUM_IMAGES,num-runs=$NUM_RUNS,dl-runs=$DL_RUNS,workers=$WORKERS,repo-tarball=$RUN_GCS/repo.tar.gz,cache-bucket=$CACHE_BUCKET,force-rebuild=$FORCE_REBUILD,keep-on-failure=$([[ $KEEP_ON_FAILURE == true ]] && echo 1 || echo 0)" \
     --metadata-from-file=startup-script="$STARTUP_SCRIPT" \
     --scopes=storage-rw,compute-rw \
     --maintenance-policy=TERMINATE \
@@ -269,18 +275,28 @@ while true; do
         break
     fi
 
-    # VM self-deletes after writing DONE. If it's gone without DONE, it crashed.
+    # FAILED sentinel is written by the ERR trap in vm_startup.sh before
+    # self-delete. Treats explicit failures as terminal so we don't spin
+    # waiting for a VM that's about to vanish.
+    if gcloud storage objects describe "$RUN_GCS/FAILED" &>/dev/null; then
+        echo "[$ELAPSED_FMT] FAILED sentinel found — startup script crashed."
+        echo "Cause: $(gcloud --quiet storage cat "$RUN_GCS/FAILED" 2>/dev/null | head -1)"
+        echo "Logs : gcloud storage cat $RUN_GCS/startup.log"
+        exit 1
+    fi
+
+    # VM self-deletes after writing DONE/FAILED. If it's gone without
+    # either, the VM was force-killed externally (e.g. preempted).
     VM_STATUS=$(gcloud compute instances describe "$RUN_NAME" \
         --zone="$ZONE" --format="value(status)" 2>/dev/null || echo "GONE")
 
     if [[ "$VM_STATUS" == "GONE" ]]; then
-        # Double-check DONE in case sentinel was written just before deletion
         if gcloud storage objects describe "$RUN_GCS/DONE" &>/dev/null; then
             echo "[$ELAPSED_FMT] VM deleted itself after completing. DONE sentinel found."
             break
         fi
-        echo "[$ELAPSED_FMT] WARNING: VM is gone but no DONE sentinel. It may have crashed."
-        echo "Check logs: gcloud storage cat $RUN_GCS/startup.log"
+        echo "[$ELAPSED_FMT] WARNING: VM is gone but no DONE/FAILED sentinel."
+        echo "Likely preempted or manually deleted. Check: gcloud storage cat $RUN_GCS/startup.log"
         exit 1
     fi
 

@@ -15,12 +15,53 @@
 
 set -euo pipefail
 
-# Show the failing line if anything dies — vital for debugging via serial console.
-trap 'echo "ERROR: vm_startup.sh failed at line $LINENO (exit $?)" >&2' ERR
-
 # google-metadata-script-runner runs the script as root with a minimal env.
 # HOME is not set, which breaks `set -u` when uv / other tools reference it.
 export HOME="${HOME:-/root}"
+
+# Self-delete the VM via the GCP Compute REST API.
+# Used by both the success path and the ERR trap so a failed run doesn't
+# leave a $0.50/hr c4-standard-16 idling indefinitely.
+# Requires --scopes=compute-rw on instance creation (set in gcp/run.sh).
+self_delete_vm() {
+    local _meta="http://metadata.google.internal/computeMetadata/v1"
+    local _hdr="Metadata-Flavor: Google"
+    local _token _project _instance _zone
+    _token=$(curl -sf "$_meta/instance/service-accounts/default/token" -H "$_hdr" \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])') || return 1
+    _project=$(curl -sf "$_meta/project/project-id"  -H "$_hdr") || return 1
+    _instance=$(curl -sf "$_meta/instance/name"      -H "$_hdr") || return 1
+    _zone=$(curl -sf "$_meta/instance/zone"          -H "$_hdr" | sed 's|.*/||') || return 1
+    curl -sf -X DELETE \
+        "https://compute.googleapis.com/compute/v1/projects/$_project/zones/$_zone/instances/$_instance" \
+        -H "Authorization: Bearer $_token" \
+        -o /dev/null
+}
+
+# ERR trap: log the failing line, flush log + partial output to GCS, then
+# self-delete so a broken run doesn't bill until manually noticed.
+# Set FATAL_NOAUTODELETE=1 in metadata to keep the VM alive for SSH triage.
+on_error() {
+    local _exit=$?
+    local _line=$1
+    echo "ERROR: vm_startup.sh failed at line $_line (exit $_exit)" >&2
+    # Best-effort flush — these may not be available yet during early-boot failures.
+    if command -v gcloud >/dev/null 2>&1 && [[ -n "${GCS_LOG:-}" ]]; then
+        gcloud --quiet storage cp "$LOG_FILE" "$GCS_LOG" >/dev/null 2>&1 || true
+        if [[ -d "${OUTPUT_DIR:-/nonexistent}" ]]; then
+            gcloud --quiet storage rsync --recursive \
+                "$OUTPUT_DIR" "${GCS_OUTPUT:-$RESULTS_BUCKET/output}" >/dev/null 2>&1 || true
+        fi
+        # Sentinel so the launcher can distinguish failure from in-progress.
+        printf 'failed at line %s exit %s\n%s\n' "$_line" "$_exit" "$(date -u)" \
+            | gcloud --quiet storage cp - "$RESULTS_BUCKET/FAILED" >/dev/null 2>&1 || true
+    fi
+    if [[ "${FATAL_NOAUTODELETE:-0}" != "1" ]]; then
+        self_delete_vm || true
+    fi
+    exit "$_exit"
+}
+trap 'on_error $LINENO' ERR
 
 METADATA_URL="http://metadata.google.internal/computeMetadata/v1/instance/attributes"
 META_HEADER="Metadata-Flavor: Google"
@@ -43,6 +84,10 @@ CACHE_BUCKET=$(meta cache-bucket 2>/dev/null || echo "")
 # a fresh tarball at the end. Use this to re-resolve PyPI without editing
 # uv.lock (e.g. monthly "is anything faster now" sweeps).
 FORCE_REBUILD=$(meta force-rebuild 2>/dev/null || echo "false")
+# `--keep-on-failure` on the launcher → keep the VM alive on ERR so you can
+# SSH in and triage. Default is to self-delete to avoid billing surprises.
+FATAL_NOAUTODELETE=$(meta keep-on-failure 2>/dev/null || echo "0")
+export FATAL_NOAUTODELETE
 
 LOG_FILE="/var/log/imread_benchmark.log"
 GCS_LOG="$RESULTS_BUCKET/startup.log"
@@ -325,17 +370,4 @@ echo "════════════════════════�
 sleep 2
 gcloud --quiet storage cp "$LOG_FILE" "$GCS_LOG" >/dev/null 2>&1 || true
 
-# Self-delete via GCP Compute REST API.
-# Requires --scopes=compute-rw on instance creation (set in gcp/run.sh).
-_METADATA="http://metadata.google.internal/computeMetadata/v1"
-_TOKEN=$(curl -sf "$_METADATA/instance/service-accounts/default/token" \
-    -H "Metadata-Flavor: Google" \
-    | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
-_PROJECT=$(curl -sf "$_METADATA/project/project-id"    -H "Metadata-Flavor: Google")
-_INSTANCE=$(curl -sf "$_METADATA/instance/name"        -H "Metadata-Flavor: Google")
-_ZONE=$(curl -sf     "$_METADATA/instance/zone"        -H "Metadata-Flavor: Google" | sed 's|.*/||')
-
-curl -sf -X DELETE \
-    "https://compute.googleapis.com/compute/v1/projects/$_PROJECT/zones/$_ZONE/instances/$_INSTANCE" \
-    -H "Authorization: Bearer $_TOKEN" \
-    -o /dev/null
+self_delete_vm
