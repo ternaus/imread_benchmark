@@ -117,7 +117,9 @@ output/
 ### Comprehensive codec libraries
 
 - **imagecodecs** — uses libjpeg-turbo 3.x; prebuilt ARM64 wheels
-- **pyvips** — libvips bindings (bundled in wheels)
+- **pyvips** — libvips bindings (bundled in wheels). Single-thread only;
+  the libvips threadpool deadlocks under fork-based PyTorch DataLoader,
+  so dataloader benchmarks are skipped on every platform.
 
 ### Standard libjpeg
 
