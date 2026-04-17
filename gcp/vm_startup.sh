@@ -116,8 +116,24 @@ for i in $(seq 1 60); do
     sleep 5
 done
 
+# Disable AppStream / dep11 / translation metadata before `apt-get update`.
+# These are software-center descriptions for desktop installs — useless on
+# a headless benchmark VM, AND they're the chronic source of "Hash Sum
+# mismatch" errors when Ubuntu's security mirror serves a stale dep11 file
+# (observed 2026-04-17). Without them, `update` is faster and more reliable.
+rm -f /etc/apt/apt.conf.d/50appstream
+cat > /etc/apt/apt.conf.d/99-headless <<'EOF'
+APT::AppStream::Enabled "false";
+Acquire::Languages "none";
+APT::Install-Recommends "false";
+APT::Install-Suggests "false";
+EOF
+
 # Run apt without piping through tail — pipefail would mask the real error.
-# Retry update once in case of transient mirror flake.
+# `update` failures are tolerated (|| true) because Ubuntu mirrors hand out
+# transiently-corrupt index files for non-critical components (dep11,
+# translations) several times a week. The subsequent `install` will fail
+# loudly with `set -e` if a *real* Packages index is missing.
 #
 # Use `-q` (one q) instead of `-qq` so per-package install lines stream to the
 # log. With `-qq` the VM looks frozen for 1-3 min while dpkg is silently
@@ -131,7 +147,7 @@ done
 # We deliberately do NOT install libvips-dev: pyvips reaches libvips through
 # the `pyvips-binary` PyPI wheel (CFFI API mode), bundled libvips + deps.
 # Saves ~150 transitive packages and 1-3 min of apt time per cold boot.
-apt-get update -q || apt-get update -q
+apt-get update -q || apt-get update -q || true
 apt-get install -y -q \
     libjpeg-turbo8-dev \
     libturbojpeg0 \
