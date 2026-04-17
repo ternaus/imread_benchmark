@@ -18,6 +18,10 @@
 #   --smoke            short validation run on a new machine type
 #                      (forces num-images=2000, num-runs=3, dl-runs=2, workers="0 2 8")
 #   --no-wait          fire-and-forget; skip polling + fetch
+#   --no-cache         disable venv caching for this run (cold install on the VM)
+#   --force-rebuild    bypass cache LOOKUP and reupload a fresh tarball.
+#                      Use to re-resolve PyPI without editing uv.lock — picks up
+#                      newly released wheel versions of every cached library.
 #   --upload-imagenet  path/to/local/imagenet/val   one-time upload to --imagenet-bucket, then exit
 #
 # Examples:
@@ -54,6 +58,7 @@ RESULTS_BUCKET="${RESULTS_BUCKET:-}"
 NO_WAIT=false
 SMOKE=false
 NO_CACHE=false
+FORCE_REBUILD=false
 UPLOAD_IMAGENET_LOCAL=""
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -70,9 +75,10 @@ while [[ $# -gt 0 ]]; do
         --no-wait)           NO_WAIT=true;              shift   ;;
         --smoke)             SMOKE=true;                shift   ;;
         --no-cache)          NO_CACHE=true;             shift   ;;
+        --force-rebuild)     FORCE_REBUILD=true;        shift   ;;
         --upload-imagenet)   UPLOAD_IMAGENET_LOCAL="$2"; shift 2 ;;
         -h|--help)
-            sed -n '2,40p' "$0" | sed 's/^# \?//'
+            sed -n '2,42p' "$0" | sed 's/^# \?//'
             exit 0
             ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
@@ -149,8 +155,9 @@ echo "  Results      : $RUN_GCS"
 echo "  Num images   : $NUM_IMAGES"
 echo "  Single runs  : $NUM_RUNS"
 echo "  DataLoader   : $DL_RUNS runs × workers=[$WORKERS]"
-[[ "$SMOKE" == "true" ]]   && echo "  Mode         : SMOKE TEST"
-[[ -n "$CACHE_BUCKET" ]]   && echo "  Venv cache   : $CACHE_BUCKET" || echo "  Venv cache   : DISABLED"
+[[ "$SMOKE" == "true" ]]         && echo "  Mode         : SMOKE TEST"
+[[ -n "$CACHE_BUCKET" ]]         && echo "  Venv cache   : $CACHE_BUCKET" || echo "  Venv cache   : DISABLED"
+[[ "$FORCE_REBUILD" == "true" ]] && echo "  Cache lookup : SKIPPED (--force-rebuild → fresh resolve, then re-upload)"
 echo "  Live log     : gcloud storage cat $RUN_GCS/startup.log"
 echo "══════════════════════════════════════════════════════"
 echo
@@ -214,7 +221,7 @@ gcloud compute instances create "$RUN_NAME" \
     --image-project=ubuntu-os-cloud \
     --boot-disk-size=60GB \
     --boot-disk-type="$BOOT_DISK_TYPE" \
-    --metadata="results-bucket=$RUN_GCS,imagenet-bucket=$IMAGENET_BUCKET,num-images=$NUM_IMAGES,num-runs=$NUM_RUNS,dl-runs=$DL_RUNS,workers=$WORKERS,repo-tarball=$RUN_GCS/repo.tar.gz,cache-bucket=$CACHE_BUCKET" \
+    --metadata="results-bucket=$RUN_GCS,imagenet-bucket=$IMAGENET_BUCKET,num-images=$NUM_IMAGES,num-runs=$NUM_RUNS,dl-runs=$DL_RUNS,workers=$WORKERS,repo-tarball=$RUN_GCS/repo.tar.gz,cache-bucket=$CACHE_BUCKET,force-rebuild=$FORCE_REBUILD" \
     --metadata-from-file=startup-script="$STARTUP_SCRIPT" \
     --scopes=storage-rw,compute-rw \
     --maintenance-policy=TERMINATE \

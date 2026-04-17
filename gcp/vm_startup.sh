@@ -39,6 +39,10 @@ NUM_RUNS=$(meta num-runs 2>/dev/null || echo 20)
 DL_RUNS=$(meta dl-runs 2>/dev/null || echo 5)
 WORKERS=$(meta workers 2>/dev/null || echo "0 1 2 4 8")
 CACHE_BUCKET=$(meta cache-bucket 2>/dev/null || echo "")
+# `--force-rebuild` on the launcher → bypasses cache LOOKUP but still uploads
+# a fresh tarball at the end. Use this to re-resolve PyPI without editing
+# uv.lock (e.g. monthly "is anything faster now" sweeps).
+FORCE_REBUILD=$(meta force-rebuild 2>/dev/null || echo "false")
 
 LOG_FILE="/var/log/imread_benchmark.log"
 GCS_LOG="$RESULTS_BUCKET/startup.log"
@@ -182,17 +186,20 @@ echo "[cache] Computing venv cache key..."
 CACHE_HIT=false
 
 if [[ -n "$CACHE_BUCKET" ]]; then
-    # Hash anything that affects the resolved venv contents.
-    # uv.lock captures the full resolved set; pyproject.toml captures extras
-    # + index config. Together they uniquely identify what venvs/ should look like.
-    REQ_HASH=$(cat pyproject.toml uv.lock 2>/dev/null \
-               | sha256sum | cut -c1-12)
+    # Hash ONLY uv.lock — it already captures the full resolved closure
+    # (every package, version, hash, extra, index). Including pyproject.toml
+    # would also bust the cache on cosmetic edits (pyproject-fmt reordering,
+    # README link, ruff config tweak) that don't change a single installed
+    # byte. New library versions are picked up the moment uv.lock changes.
+    REQ_HASH=$(sha256sum uv.lock 2>/dev/null | cut -c1-12)
     CACHE_KEY="venvs-$(uname -s)-$(uname -m)-${REQ_HASH}.tar.zst"
     CACHE_PATH="${CACHE_BUCKET%/}/${CACHE_KEY}"
     echo "[cache] Key  : $CACHE_KEY"
     echo "[cache] Path : $CACHE_PATH"
 
-    if gcloud storage objects describe "$CACHE_PATH" >/dev/null 2>&1; then
+    if [[ "$FORCE_REBUILD" == "true" ]]; then
+        echo "[cache] FORCE_REBUILD=true — bypassing lookup, will rebuild + reupload."
+    elif gcloud storage objects describe "$CACHE_PATH" >/dev/null 2>&1; then
         echo "[cache] HIT — downloading + extracting venvs..."
         time gcloud --quiet storage cp "$CACHE_PATH" /tmp/venvs.tar.zst
         time tar --use-compress-program='zstd -d' -xf /tmp/venvs.tar.zst

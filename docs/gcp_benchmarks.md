@@ -98,19 +98,67 @@ Press Ctrl+C at any point — the VM is deleted immediately via a cleanup trap.
 ## Options
 
 
-| Flag                | Default         | Description                                                  |
-| ------------------- | --------------- | ------------------------------------------------------------ |
-| `--imagenet-bucket` | (required)      | GCS path to ImageNet val directory                           |
-| `--results-bucket`  | (required)      | GCS bucket for results and logs                              |
-| `--zone`            | `us-central1-a` | GCP zone                                                     |
-| `--machine-type`    | `c3-standard-8` | VM type (Intel Sapphire Rapids, 8 vCPU, 32 GB)               |
-| `--num-images`      | `50000`         | Number of images per benchmark run                           |
-| `--no-wait`         | off             | Fire-and-forget; return immediately after VM creation        |
-| `--upload-imagenet` | —               | Upload local ImageNet path to `--imagenet-bucket`, then exit |
+| Flag                | Default         | Description                                                          |
+| ------------------- | --------------- | -------------------------------------------------------------------- |
+| `--imagenet-bucket` | (required)      | GCS path to ImageNet val directory                                   |
+| `--results-bucket`  | (required)      | GCS bucket for results and logs                                      |
+| `--zone`            | `us-central1-a` | GCP zone                                                             |
+| `--machine-type`    | `c3-standard-8` | VM type (Intel Sapphire Rapids, 8 vCPU, 32 GB)                       |
+| `--num-images`      | `50000`         | Number of images per benchmark run                                   |
+| `--no-wait`         | off             | Fire-and-forget; return immediately after VM creation                |
+| `--smoke`           | off             | Tiny validation run on a new machine type (~10 min, ~$0.10)          |
+| `--no-cache`        | off             | Skip the venv cache entirely (forces a cold install on the VM)       |
+| `--force-rebuild`   | off             | Re-resolve PyPI on the VM and reupload the cache (see below)         |
+| `--upload-imagenet` | —               | Upload local ImageNet path to `--imagenet-bucket`, then exit         |
 
 
 All flags can also be set as environment variables (`IMAGENET_BUCKET`, `RESULTS_BUCKET`,
 `ZONE`, `MACHINE_TYPE`, `NUM_IMAGES`).
+
+---
+
+## Venv cache
+
+Cold installing 11 decoder libraries on the VM takes ~25 minutes. To avoid paying that on
+every run, the first run on a given `(os, arch, deps)` combo tars `venvs/` and uploads it
+to `gs://<your-bucket>/imread-cache/`. Subsequent runs pull and extract it in seconds.
+
+Default cache bucket is sibling to your results bucket: if you pass
+`--results-bucket gs://my-bucket/imread-results`, the cache lands in
+`gs://my-bucket/imread-cache/`. Override with `CACHE_BUCKET=gs://...` or disable per-run
+with `--no-cache`.
+
+### Cache key
+
+```
+venvs-<os>-<arch>-<sha256(uv.lock)[:12]>.tar.zst
+```
+
+Only `uv.lock` is hashed — it already pins every package, version, hash, extra, and index
+URL, so no other input adds information. Cosmetic edits to `pyproject.toml`
+(formatter, README link, ruff config) do not bust the cache.
+
+### When new library versions ship to PyPI
+
+Cached venvs are **frozen** at whatever `uv.lock` resolved to. New releases on PyPI never
+sneak in just because the upstream package shipped — that's the whole point: bit-identical
+benchmark inputs across reruns. To pull in newer versions, pick one:
+
+```bash
+# Option A: explicit, recorded in git, picked up on the next run automatically.
+uv lock --upgrade
+git add uv.lock && git commit -m "chore: refresh deps"
+./gcp/run.sh ...
+
+# Option B: ad-hoc PyPI re-resolve without editing the lockfile (e.g. monthly
+# "is anything faster now" sweep). Bypasses cache lookup, runs `uv pip install`
+# fresh on the VM, and OVERWRITES the cached tarball under the same key.
+./gcp/run.sh --force-rebuild ...
+```
+
+Old cache entries stick around forever in GCS (keyed by old hash), so historical
+benchmarks remain reproducible: `git checkout <old-sha> && ./gcp/run.sh ...` rebuilds the
+exact env from then.
 
 ---
 

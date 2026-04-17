@@ -80,6 +80,19 @@ imread-benchmark plot --input output --output _internal/plots
 
 The CLI sets up `venvs/<group>/` for each dependency group it needs. Subsequent runs reuse those venvs, so only the first invocation pays the install cost.
 
+## Running on Google Cloud
+
+Spin up a benchmark VM on GCP, run everything against ImageNet from a GCS bucket, and have it self-delete when done:
+
+```bash
+./gcp/run.sh \
+    --imagenet-bucket gs://my-bucket/imagenet/val \
+    --results-bucket  gs://my-bucket/imread-results \
+    --no-wait
+```
+
+Built venvs are cached in GCS (keyed by `sha256(uv.lock)`), so reruns on the same machine type skip the ~25-minute install. Use `--force-rebuild` to re-resolve PyPI without editing `uv.lock`. Full details, machine-type matrix, cost, and cache semantics: [docs/gcp_benchmarks.md](docs/gcp_benchmarks.md).
+
 ## Results Structure
 
 ```
