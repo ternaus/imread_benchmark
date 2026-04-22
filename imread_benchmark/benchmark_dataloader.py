@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 import numpy as np
 from tqdm import tqdm
 
-from imread_benchmark.benchmark import _summarise
+from imread_benchmark.benchmark import _discover_skips, _summarise
 from imread_benchmark.decoders import REGISTRY
 from imread_benchmark.utils import collect_jpeg_paths, get_package_versions, get_system_identifier
 
@@ -141,7 +141,30 @@ def main() -> None:
     logger.info("Pre-loading %d images into memory…", len(image_paths))
     images_bytes = [p.read_bytes() for p in image_paths]
 
-    dataset = InMemoryDataset(images_bytes, decoder.decode)
+    # Filter out items the decoder cannot handle (CMYK / RGBA / weird subsampling
+    # JPEGs that exist in real ImageNet val). Doing this once on the main
+    # process, before spawning DataLoader workers, means:
+    #   1. Worker subprocesses never raise mid-batch and tear down the loader.
+    #   2. Every num_workers config is benchmarked on the exact same item set,
+    #      so the comparison across worker counts stays apples-to-apples.
+    skipped_indices, skip_examples = _discover_skips(decoder.decode, images_bytes)
+    if len(skipped_indices) == len(images_bytes):
+        first_err = skip_examples[0] if skip_examples else "no example captured"
+        msg = f"Decoder {library!r} failed on all {len(images_bytes)} items. First error: {first_err}"
+        raise RuntimeError(msg)
+    if skipped_indices:
+        logger.warning(
+            "Decoder %s skipped %d/%d items (%.4f%%): %s",
+            library,
+            len(skipped_indices),
+            len(images_bytes),
+            100.0 * len(skipped_indices) / len(images_bytes),
+            "; ".join(skip_examples),
+        )
+    skip_set = set(skipped_indices)
+    good_bytes = [b for i, b in enumerate(images_bytes) if i not in skip_set]
+
+    dataset = InMemoryDataset(good_bytes, decoder.decode)
 
     system_id = get_system_identifier()
     output_dir = args.output_dir / system_id
@@ -155,7 +178,16 @@ def main() -> None:
         "num_threads": decoder.get_num_threads(),
         "system_info": get_package_versions(library),
         "worker_results": [],
-        "num_images": len(image_paths),
+        # `num_images` retained as the count actually fed to the DataLoader
+        # (post-skip), so backwards-compatible plotting (which divides total
+        # time by num_images for throughput sanity-checks) keeps working.
+        "num_images": len(good_bytes),
+        "num_images_total": len(image_paths),
+        "num_images_decoded": len(good_bytes),
+        "num_images_skipped": len(skipped_indices),
+        "skip_rate": len(skipped_indices) / len(image_paths) if image_paths else 0.0,
+        "skip_indices": skipped_indices,
+        "skip_examples": skip_examples,
         "num_runs": args.num_runs,
     }
 

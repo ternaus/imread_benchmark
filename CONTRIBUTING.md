@@ -79,7 +79,8 @@ In [`pyproject.toml`](pyproject.toml), add the pip distribution name to one of t
 
 - `mainstream` — coexists with everything else (opencv, skimage, kornia-rs, torch, etc.). Use this unless you have a real conflict.
 - `tensorflow` — only if your library hard-conflicts with torch.
-- `pillow-simd` — only for Pillow forks; reserved for the `pillow-simd` x86 variant itself.
+
+(There used to be a third `pillow-simd` group; dropped 2026-04 — see [`docs/gcp_benchmarks.md`](docs/gcp_benchmarks.md#why-no-pillow-simd) for the reasoning. If you're adding a new Pillow fork that masks vanilla `PIL` in the same venv, add a fresh group rather than reusing this slot.)
 
 ```toml
 mainstream = [
@@ -142,6 +143,6 @@ tests/
 tools/
 ├── analyze_images.py        # dataset statistics
 └── create_plots.py          # generate performance charts
-pyproject.toml               # 3 dependency groups under [project.optional-dependencies]:
-                             #   mainstream / tensorflow / pillow-simd
+pyproject.toml               # 2 dependency groups under [project.optional-dependencies]:
+                             #   mainstream / tensorflow
 ```

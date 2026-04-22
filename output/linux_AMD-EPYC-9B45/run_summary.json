@@ -1,0 +1,45 @@
+{
+  "timestamp_utc": "2026-04-22T04:23:59.184727+00:00",
+  "system": "linux_AMD-EPYC-9B45",
+  "mode": "both",
+  "num_images": 50000,
+  "num_runs": 5,
+  "dataloader_runs": 3,
+  "workers": [
+    0,
+    2,
+    4,
+    8
+  ],
+  "libs_requested": [
+    "imagecodecs",
+    "imageio",
+    "jpeg4py",
+    "kornia",
+    "opencv",
+    "pillow",
+    "pyvips",
+    "simplejpeg",
+    "skimage",
+    "tensorflow",
+    "torchvision",
+    "turbojpeg"
+  ],
+  "libs_skipped_platform": [],
+  "libs_run": [
+    "imagecodecs",
+    "imageio",
+    "jpeg4py",
+    "kornia",
+    "opencv",
+    "pillow",
+    "pyvips",
+    "simplejpeg",
+    "skimage",
+    "tensorflow",
+    "torchvision",
+    "turbojpeg"
+  ],
+  "failures": [],
+  "exit_status": "ok"
+}

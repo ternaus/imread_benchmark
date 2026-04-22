@@ -195,9 +195,16 @@ EOF
 #                         saves debugging package-rename surprises).
 #   curl/git/python3/zstd — control-plane essentials.
 #
-# We deliberately do NOT install libvips-dev: pyvips reaches libvips through
-# the `pyvips-binary` PyPI wheel (CFFI API mode), bundled libvips + deps.
-# Saves ~150 transitive packages and 1-3 min of apt time per cold boot.
+# We deliberately do NOT install:
+#   libvips-dev    — pyvips uses the `pyvips-binary` PyPI wheel (CFFI API
+#                    mode) for bundled libvips + deps. Saves ~150 transitive
+#                    GLib/GTK packages and 1-3 min of apt time per cold boot.
+#   zlib1g-dev / build-essential — required only for compiling pillow-simd
+#                    from sdist (no Linux wheels published since 2023).
+#                    Pillow-SIMD was dropped from the benchmark in 2026-04
+#                    (abandoned upstream, <0.1% of Pillow's PyPI downloads,
+#                    superseded by jpeg4py / simplejpeg / kornia-rs which
+#                    ship maintained Linux wheels).
 apt-get update -q || apt-get update -q || true
 apt-get install -y -q \
     libjpeg-turbo8-dev \
@@ -336,7 +343,7 @@ fi
 
 # ── Control-plane venv (just to get the `imread-benchmark` CLI) ────────────────
 # A small venv (numpy + pandas + typer) that drives the per-group worker venvs.
-# Worker venvs (mainstream/tensorflow/pillow-simd) are created lazily by the CLI.
+# Worker venvs (mainstream / tensorflow) are created lazily by the CLI.
 # Idempotent: cached `venvs/control/` from a previous run is reused as-is, since
 # `uv pip install -e .` is fast on a populated venv and picks up any code changes.
 echo
@@ -351,7 +358,7 @@ echo "[step 5] Done."
 
 # ── Run benchmarks via the unified CLI ─────────────────────────────────────────
 # `imread-benchmark run --mode both` orchestrates:
-#   - venv setup per group (mainstream / tensorflow / pillow-simd)
+#   - venv setup per group (mainstream / tensorflow)
 #   - single + default-thread benchmark for each lib
 #   - DataLoader benchmark for each lib eligible on this platform
 # Platform skips (jpeg4py off macOS, pyvips off Arm-Linux DataLoader, etc.) are
@@ -361,6 +368,15 @@ echo "[step 6] Running benchmarks..."
 echo "         NUM_IMAGES=$NUM_IMAGES  NUM_RUNS=$NUM_RUNS  DL_RUNS=$DL_RUNS"
 echo "         WORKERS=$WORKERS"
 WORKERS_CSV=$(echo "$WORKERS" | tr ' ' ',')
+# Partial-failure policy: per-decoder failures (e.g. turbojpeg crashing on a
+# CMYK JPEG in ImageNet val) MUST NOT mark this VM as failed. We've lost
+# whole 4-hour runs that way — 9 of 12 decoders had clean numbers but the ERR
+# trap nuked the FAILED sentinel and the wrapper script bailed.
+#
+# The CLI now exits 0 on partial failure and writes
+# output/<system>/run_summary.json with per-decoder status. A FAILED sentinel
+# from this script means infrastructure broke (apt, venv, ImageNet download),
+# not "one of 12 libraries had a hiccup".
 imread-benchmark run \
     --data-dir "$IMAGENET_DIR" \
     --output-dir output \

@@ -608,9 +608,6 @@ mainstream = [
     { name = "torchvision", version = "0.26.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torchvision", version = "0.26.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
 ]
-pillow-simd = [
-    { name = "pillow-simd", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-]
 plot = [
     { name = "matplotlib" },
     { name = "seaborn" },
@@ -637,7 +634,6 @@ requires-dist = [
     { name = "opencv-python-headless", marker = "extra == 'mainstream'" },
     { name = "pandas" },
     { name = "pillow", marker = "extra == 'mainstream'" },
-    { name = "pillow-simd", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'pillow-simd'" },
     { name = "py-cpuinfo" },
     { name = "pyturbojpeg", marker = "extra == 'mainstream'", specifier = "<2" },
     { name = "pyvips", marker = "extra == 'mainstream'" },
@@ -651,7 +647,7 @@ requires-dist = [
     { name = "tqdm" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["mainstream", "pillow-simd", "plot", "tensorflow"]
+provides-extras = ["mainstream", "plot", "tensorflow"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1464,12 +1460,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5e/8b/51b0eddcfa2180d60e41f06bd6d0a62202b20b59c68f5a132e615b75aecf/pillow-12.2.0-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:25373b66e0dd5905ed63fa3cae13c82fbddf3079f2c8bf15c6fb6a35586324c1", size = 6002215 },
     { url = "https://files.pythonhosted.org/packages/bc/60/5382c03e1970de634027cee8e1b7d39776b778b81812aaf45b694dfe9e28/pillow-12.2.0-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:bfa9c230d2fe991bed5318a5f119bd6780cda2915cca595393649fc118ab895e", size = 7080946 },
 ]
-
-[[package]]
-name = "pillow-simd"
-version = "9.5.0.post2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d0/d9/5cf8d7c9ecaf389fe62570a5287036611f1328796ed6e59abbc2dc09f4a6/Pillow-SIMD-9.5.0.post2.tar.gz", hash = "sha256:39dfb027bdaa3e35597df9a1c42ea97091f32bc83f25ab9cab0845b3c4bad331", size = 904623 }
 
 [[package]]
 name = "platformdirs"

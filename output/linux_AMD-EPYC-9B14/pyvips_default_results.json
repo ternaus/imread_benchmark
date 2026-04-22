@@ -1,0 +1,53 @@
+{
+  "library": "pyvips",
+  "mode": "memory",
+  "run_tag": "default",
+  "requested_threads": 0,
+  "effective_threads": 16,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:35:04 UTC 2026",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 9B14",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "pyvips": "3.1.1"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 373.0045096236681,
+    "images_per_second_std": 0.9827895249959594,
+    "images_per_second_p50": 373.02958373616025,
+    "images_per_second_p90": 374.04364822104924,
+    "images_per_second_p99": 374.54590772681854,
+    "us_per_image_mean": 2680.9513359760167,
+    "us_per_image_p50": 2680.7525290200283,
+    "us_per_image_p90": 2688.2834806320025,
+    "us_per_image_p99": 2691.066504739187,
+    "raw_times_s": [
+      133.47509657900082,
+      134.03762645100142,
+      133.97406912600127,
+      134.1822553560014,
+      134.56878648199927
+    ],
+    "raw_throughput_ips": [
+      374.6017143385707,
+      373.02958373616025,
+      373.20654904476703,
+      372.62751223955865,
+      371.5571887592841
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 50000,
+    "num_images_skipped": 0,
+    "skip_rate": 0.0,
+    "skip_indices": [],
+    "skip_examples": []
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

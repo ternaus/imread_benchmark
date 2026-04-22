@@ -4,8 +4,8 @@ imread-benchmark CLI — orchestrator that owns venv setup + benchmark dispatch.
 Replaces run_benchmarks.sh / run_dataloader_benchmarks.sh. Lives in the
 "control plane" venv (anywhere with this package installed); shells out to
 per-group worker venvs under venvs/<group>/ for the actual decode work.
-This split is required because mainstream / tensorflow / pillow-simd cannot
-coexist in one Python process.
+This split is required because mainstream / tensorflow cannot coexist
+in one Python process (numpy / protobuf pin fights).
 
 Usage:
     imread-benchmark list-libs
@@ -16,6 +16,7 @@ Usage:
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import os
 import platform
@@ -340,11 +341,37 @@ def run(
 
     typer.echo("\n" + "─" * 60)
     if failures:
-        typer.echo(f"Done with {len(failures)} failure(s):")
+        typer.echo(f"Done with {len(failures)} per-decoder failure(s) — other decoders' results are intact:")
         for f in failures:
             typer.echo(f"  - {f}")
-        raise typer.Exit(1)
-    typer.echo("All benchmarks completed successfully.")
+    else:
+        typer.echo("All benchmarks completed successfully.")
+
+    # Persist a machine-readable summary so the cloud orchestrator can tell
+    # "all decoders finished cleanly" from "9 of 12 finished, 3 failed but
+    # their JSONs are missing/partial". Without this the only signal is the
+    # CLI exit code, which we deliberately keep at 0 for partial failures so
+    # vm_startup.sh writes DONE (not FAILED) and we don't lose the 9 clean
+    # decoders' work because turbojpeg crashed on a CMYK image.
+    summary_path = output_dir / get_system_identifier() / "run_summary.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_payload = {
+        "timestamp_utc": _dt.datetime.now(_dt.UTC).isoformat(),
+        "system": get_system_identifier(),
+        "mode": mode,
+        "num_images": num_images,
+        "num_runs": num_runs,
+        "dataloader_runs": dataloader_runs,
+        "workers": worker_counts,
+        "libs_requested": requested,
+        "libs_skipped_platform": skipped,
+        "libs_run": all_libs,
+        "failures": failures,
+        "exit_status": "ok" if not failures else "partial",
+    }
+    with summary_path.open("w") as fh:
+        json.dump(summary_payload, fh, indent=2)
+    typer.echo(f"Run summary: {summary_path}")
 
 
 @app.command("plot")
@@ -363,7 +390,21 @@ def plot(
         raise typer.Exit(1)
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [sys.executable, "tools/create_plots.py", "--input", str(input_dir), "--output", str(output_dir)]
+    cmd = [sys.executable, "-m", "tools.create_plots", "--input", str(input_dir), "--output", str(output_dir)]
+    typer.echo("$ " + " ".join(cmd))
+    raise typer.Exit(subprocess.run(cmd, check=False).returncode)
+
+
+@app.command("render-readme")
+def render_readme(
+    input_dir: Path = typer.Option(Path("output"), "--input", "-i", exists=True),
+    readme: Path = typer.Option(Path("README.md"), "--readme", "-r", exists=True),
+    check: bool = typer.Option(False, "--check", help="Exit 1 if README would change."),
+) -> None:
+    """Regenerate the BENCH:* tables in README.md from output/ JSONs."""
+    cmd = [sys.executable, "-m", "tools.render_readme", "--input", str(input_dir), "--readme", str(readme)]
+    if check:
+        cmd.append("--check")
     typer.echo("$ " + " ".join(cmd))
     raise typer.Exit(subprocess.run(cmd, check=False).returncode)
 

@@ -1,0 +1,53 @@
+{
+  "library": "imagecodecs",
+  "mode": "memory",
+  "run_tag": "1t",
+  "requested_threads": 1,
+  "effective_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:35:04 UTC 2026",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "INTEL(R) XEON(R) PLATINUM 8581C CPU @ 2.30GHz",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "imagecodecs": "2026.3.6"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 723.4317318449605,
+    "images_per_second_std": 0.15811248268794392,
+    "images_per_second_p50": 723.3406315441213,
+    "images_per_second_p90": 723.62613073312,
+    "images_per_second_p99": 723.6471911072899,
+    "us_per_image_mean": 1382.300504312,
+    "us_per_image_p50": 1382.4745305200008,
+    "us_per_image_p90": 1382.58851044,
+    "us_per_image_p99": 1382.64171448,
+    "raw_times_s": [
+      69.12372652600004,
+      69.09980627099998,
+      69.132381302,
+      69.09422012700003,
+      69.124991852
+    ],
+    "raw_throughput_ips": [
+      723.3406315441213,
+      723.5910301095034,
+      723.2500755554547,
+      723.6495311488644,
+      723.3273908668584
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 50000,
+    "num_images_skipped": 0,
+    "skip_rate": 0.0,
+    "skip_indices": [],
+    "skip_examples": []
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

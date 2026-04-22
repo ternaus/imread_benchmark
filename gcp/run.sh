@@ -11,10 +11,10 @@
 # Optional:
 #   --zone             GCP zone              (default: us-central1-a)
 #   --machine-type     GCP machine type      (default: c3-standard-8)
-#   --num-images       images to benchmark   (default: 50000)
-#   --num-runs         single-thread timed runs per library (default: 20)
-#   --dl-runs          DataLoader timed runs per worker config (default: 5)
-#   --workers          DataLoader worker counts to test       (default: "0 1 2 4 8")
+#   --num-images       images to benchmark   (default: 50000 = full ImageNet val)
+#   --num-runs         single-thread timed runs per library (default: 5)
+#   --dl-runs          DataLoader timed runs per worker config (default: 3)
+#   --workers          DataLoader worker counts to test       (default: "0 2 4 8")
 #   --smoke            short validation run on a new machine type
 #                      (forces num-images=2000, num-runs=3, dl-runs=2, workers="0 2 8")
 #   --no-wait          fire-and-forget; skip polling + fetch
@@ -36,7 +36,7 @@
 #     --imagenet-bucket gs://my-bucket/imagenet/val \
 #     --results-bucket  gs://my-bucket/imread-results --no-wait
 #
-#   # Full run (blocks ~4h, fetches results when done)
+#   # Full run (blocks ~45-90 min depending on machine, fetches results when done)
 #   ./gcp/run.sh \
 #     --imagenet-bucket gs://my-bucket/imagenet/val \
 #     --results-bucket  gs://my-bucket/imread-results
@@ -52,10 +52,22 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # ── Defaults ──────────────────────────────────────────────────────────────────
 ZONE="${ZONE:-us-central1-a}"
 MACHINE_TYPE="${MACHINE_TYPE:-c3-standard-8}"
+# Statistics rationale (see docs/gcp_benchmarks.md "Sample size"):
+#   N=50000   → full ImageNet val. No sampling story to defend in the paper.
+#   NUM_RUNS=5  → enough for stable mean ± std. Per-image variance of decode
+#                 time + N=50k already drives SE_mean below 0.1%, which is
+#                 way below the 2x–100x effect sizes we actually compare.
+#                 Going from 20 to 5 is a 4x wallclock reduction with zero
+#                 paper-visible loss (we drop the per-run percentile columns).
+#   DL_RUNS=3   → DataLoader runs are dominated by worker startup variance;
+#                 5+ reps don't help the signal.
+#   WORKERS     → dropped 1 (in-torch single-process is what 0 already
+#                 measures; 0-vs-1 distinction is a torch impl detail nobody
+#                 plots). Kept 0 (no-fork), 2 (fork sanity), 4, 8 (scaling).
 NUM_IMAGES="${NUM_IMAGES:-50000}"
-NUM_RUNS="${NUM_RUNS:-20}"
-DL_RUNS="${DL_RUNS:-5}"
-WORKERS="${WORKERS:-0 1 2 4 8}"
+NUM_RUNS="${NUM_RUNS:-5}"
+DL_RUNS="${DL_RUNS:-3}"
+WORKERS="${WORKERS:-0 2 4 8}"
 IMAGENET_BUCKET="${IMAGENET_BUCKET:-}"
 RESULTS_BUCKET="${RESULTS_BUCKET:-}"
 NO_WAIT=false
@@ -184,10 +196,20 @@ cd "$REPO_ROOT"
 # The `[ -e "$f" ]` filter drops files that git still tracks but have been
 # deleted-and-not-yet-committed locally — without it, tar bails out with
 # "Cannot stat" the moment any tracked file is removed.
+# Strip macOS-specific tar metadata before packing:
+#   COPYFILE_DISABLE=1   stops macOS from sneaking `._filename` AppleDouble
+#                        companions into the archive (no-op on Linux).
+#   --no-xattrs          drops com.apple.provenance + other xattrs Gatekeeper
+#                        adds to network-downloaded files. Both BSD tar and
+#                        GNU tar accept this flag, so the script is portable.
+# Without these, GNU tar on the Linux VM spams startup.log with thousands of
+# "Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.*'"
+# warnings — harmless, but they drown out useful log lines and waste GCS
+# log-bandwidth on the periodic sync.
 { git ls-files; git ls-files --others --exclude-standard; } \
     | grep -vE '^(output|gcp|docs|_internal|paper.*)/' \
     | while IFS= read -r f; do [ -e "$f" ] && printf '%s\n' "$f"; done \
-    | tar -czf "$REPO_TARBALL" -T -
+    | COPYFILE_DISABLE=1 tar --no-xattrs -czf "$REPO_TARBALL" -T -
 
 echo "[1/4] Uploading repo + startup script to GCS..."
 gcloud --quiet storage cp "$REPO_TARBALL" "$RUN_GCS/repo.tar.gz"
@@ -196,13 +218,21 @@ gcloud --quiet storage cp "$STARTUP_SCRIPT" "$RUN_GCS/vm_startup.sh"
 echo "[1/4] Done."
 
 # ── Auto-detect arch + disk type from machine type ────────────────────────────
-# Arm machines (c4a, t2a) need an arm64 image and hyperdisk-balanced.
-# Modern x86 (c4, c4d, n4) need hyperdisk-balanced too.
-# Older x86 (c3, c3d, n2, n2d, e2) accept pd-ssd.
+# Arm:
+#   c4a (Axion / Neoverse V2): arm64 image + hyperdisk-balanced
+#   t2a (Ampere Altra / Neoverse N1, older): arm64 image + pd-balanced
+#       (t2a predates hyperdisk-balanced and rejects it at create time)
+# x86:
+#   c4, c4d, n4 (modern): hyperdisk-balanced
+#   c3, c3d, n2, n2d, e2 (older): pd-ssd
 case "$MACHINE_TYPE" in
-    c4a-*|t2a-*)
+    c4a-*)
         IMAGE_FAMILY=ubuntu-2404-lts-arm64
         BOOT_DISK_TYPE=hyperdisk-balanced
+        ;;
+    t2a-*)
+        IMAGE_FAMILY=ubuntu-2404-lts-arm64
+        BOOT_DISK_TYPE=pd-balanced
         ;;
     c4-*|c4d-*|n4-*)
         IMAGE_FAMILY=ubuntu-2404-lts-amd64
@@ -304,9 +334,14 @@ while true; do
 done
 
 # ── Fetch results ─────────────────────────────────────────────────────────────
+# rsync (not `cp --recursive`) so the remote `output/<machine_id>/` lands as
+# `./output/<machine_id>/`, not nested under `./output/output/<machine_id>/`.
+# `cp --recursive gs://.../output/ ./output/` copies the SOURCE directory as a
+# subdirectory under DESTINATION, which produces the wrong nesting and silently
+# scatters results across runs (every machine type ends up under output/output/).
 echo "[4/4] Downloading results..."
 mkdir -p "$REPO_ROOT/output"
-gcloud storage cp --recursive "$RUN_GCS/output/" "$REPO_ROOT/output/"
+gcloud storage rsync --recursive "$RUN_GCS/output/" "$REPO_ROOT/output/"
 echo "[4/4] Results saved to: $REPO_ROOT/output/"
 
 echo

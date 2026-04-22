@@ -51,6 +51,15 @@ REQUIRED_BENCHMARK_RESULTS_KEYS = {
     "us_per_image_p99",
     "raw_times_s",
     "raw_throughput_ips",
+    # Skip-on-bad-image schema. Without these the cloud orchestrator can't tell
+    # "all 50k decoded cleanly" from "49997 decoded, 3 skipped (CMYK)" — and
+    # losing that distinction in the paper would be a methodological lie.
+    "num_images_total",
+    "num_images_decoded",
+    "num_images_skipped",
+    "skip_rate",
+    "skip_indices",
+    "skip_examples",
 }
 
 REQUIRED_DL_WORKER_KEYS = {
@@ -181,6 +190,89 @@ def test_dataloader_incremental_save(tmp_path, jpeg_dir):
     assert not missing, f"missing worker_results keys: {missing}"
     assert wr["num_workers"] == 0
     assert wr["num_warmup"] >= 1
+
+    # Skip-rate fields must surface in the dataloader JSON too — Pillow on
+    # synthetic clean fixtures should hit zero skips. If a future change makes
+    # the dataloader path silently swallow skips, this catches it.
+    for k in (
+        "num_images_total",
+        "num_images_decoded",
+        "num_images_skipped",
+        "skip_rate",
+        "skip_indices",
+        "skip_examples",
+    ):
+        assert k in j, f"dataloader json missing key: {k}"
+    assert j["num_images_skipped"] == 0
+    assert j["num_images_decoded"] == j["num_images_total"]
+    assert j["skip_rate"] == 0.0
+
+
+@pytest.mark.skipif(not pillow_available, reason="pillow not installed")
+def test_cli_writes_run_summary(tmp_path, jpeg_dir):
+    """
+    `imread-benchmark run` must write run_summary.json next to the per-decoder
+    JSONs, with `exit_status` reflecting whether any decoders failed.
+    vm_startup.sh's "DONE vs FAILED" decision relies on this — a missing or
+    malformed summary would silently regress us to "any decoder hiccup nukes
+    the whole 4-hour run".
+    """
+    # The CLI shells out to venvs/mainstream/bin/python via --skip-setup. If
+    # that doesn't exist in the dev/CI checkout, the subprocess would fail with
+    # FileNotFoundError before producing the summary — so the test isn't
+    # exercising the actual run_summary.json codepath. Skip cleanly instead of
+    # logging a misleading red.
+    import pathlib
+
+    if not pathlib.Path("venvs/mainstream/bin/python").exists():
+        pytest.skip("venvs/mainstream/bin/python missing — run `imread-benchmark run` once locally first")
+
+    out = tmp_path / "results"
+    proc = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            "-m",
+            "imread_benchmark.cli",
+            "run",
+            "--data-dir",
+            str(jpeg_dir),
+            "--output-dir",
+            str(out),
+            "--libs",
+            "pillow",
+            "--mode",
+            "single",
+            "--num-images",
+            "4",
+            "--num-runs",
+            "1",
+            "--skip-setup",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    # Even on partial success this must exit 0 so vm_startup.sh writes DONE.
+    assert proc.returncode == 0, f"cli failed: {proc.stderr}"
+
+    summaries = list(out.rglob("run_summary.json"))
+    assert len(summaries) == 1, f"expected one run_summary.json, got {summaries}"
+    s = json.loads(summaries[0].read_text())
+
+    for k in (
+        "timestamp_utc",
+        "system",
+        "mode",
+        "num_images",
+        "libs_requested",
+        "libs_run",
+        "failures",
+        "exit_status",
+    ):
+        assert k in s, f"run_summary.json missing key: {k}"
+    assert s["exit_status"] == "ok"
+    assert s["failures"] == []
+    assert s["libs_run"] == ["pillow"]
 
 
 @pytest.mark.skipif(not pillow_available, reason="pillow not installed")

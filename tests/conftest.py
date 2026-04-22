@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 PKG_TO_MODULE = {
     "opencv-python-headless": "cv2",
     "pillow": "PIL",
-    "pillow-simd": "PIL",
     "scikit-image": "skimage",
     "imageio": "imageio",
     "torchvision": "torchvision",

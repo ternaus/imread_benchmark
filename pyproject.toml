@@ -20,11 +20,13 @@ dependencies = [
   "tqdm",
   "typer>=0.12",
 ]
-# Three groups, not thirteen. Real conflicts only exist between these three:
+# Two groups, not thirteen. Real conflicts only exist between these two:
 #   tensorflow vs torch  — numpy/protobuf pin fights
-#   pillow vs pillow-simd — same dist name, install masks the other
 # Everything else (opencv, skimage, imageio, kornia-rs, simplejpeg, turbojpeg,
 # imagecodecs, pyvips, jpeg4py, torch, torchvision, Pillow) coexists in one venv.
+#
+# Pillow-SIMD WAS a third group (incompatible with mainstream Pillow). Dropped
+# 2026-04 — see docs/gcp_benchmarks.md "Why no Pillow-SIMD?" for rationale.
 optional-dependencies.mainstream = [
   "imagecodecs",
   "imageio",
@@ -43,7 +45,6 @@ optional-dependencies.mainstream = [
   "torch",
   "torchvision",
 ]
-optional-dependencies.pillow-simd = [ "pillow-simd; sys_platform=='linux' and platform_machine=='x86_64'" ]
 optional-dependencies.plot = [ "matplotlib>=3.8", "seaborn>=0.13" ]
 optional-dependencies.tensorflow = [ "tensorflow" ]
 scripts.imread-benchmark = "imread_benchmark.cli:app"
@@ -56,7 +57,6 @@ entry-points."imread_benchmark.decoders".kornia = "imread_benchmark.decoders.kor
 # no manual dict maintenance, plays well with out-of-tree decoder plugins.
 entry-points."imread_benchmark.decoders".opencv = "imread_benchmark.decoders.opencv_decoder:OpenCVDecoder"
 entry-points."imread_benchmark.decoders".pillow = "imread_benchmark.decoders.pillow_decoder:PillowDecoder"
-entry-points."imread_benchmark.decoders".pillow-simd = "imread_benchmark.decoders.pillow_simd_decoder:PillowSIMDDecoder"
 entry-points."imread_benchmark.decoders".pyvips = "imread_benchmark.decoders.pyvips_decoder:PyVipsDecoder"
 entry-points."imread_benchmark.decoders".simplejpeg = "imread_benchmark.decoders.simplejpeg_decoder:SimpleJpegDecoder"
 entry-points."imread_benchmark.decoders".skimage = "imread_benchmark.decoders.skimage_decoder:SkimageDecoder"

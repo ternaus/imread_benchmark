@@ -1,0 +1,121 @@
+{
+  "library": "imageio",
+  "benchmark_type": "dataloader",
+  "batch_size": 32,
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:35:04 UTC 2026",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 9B14",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "imageio": "2.37.3"
+  },
+  "worker_results": [
+    {
+      "num_workers": 0,
+      "num_warmup": 1,
+      "images_per_second_mean": 482.7624910137792,
+      "images_per_second_std": 3.4170653978697407,
+      "images_per_second_p50": 483.295780018339,
+      "images_per_second_p90": 485.98341068875584,
+      "images_per_second_p99": 486.58812758959965,
+      "us_per_image_mean": 2071.5159198733304,
+      "us_per_image_p50": 2069.1262811399974,
+      "us_per_image_p90": 2086.2884899879973,
+      "us_per_image_p99": 2090.149986978797,
+      "raw_times_s": [
+        104.52895210999986,
+        103.45631405699987,
+        102.7421218139998
+      ],
+      "raw_throughput_ips": [
+        478.33637466663845,
+        483.295780018339,
+        486.65531835636006
+      ]
+    },
+    {
+      "num_workers": 2,
+      "num_warmup": 1,
+      "images_per_second_mean": 831.2606204918847,
+      "images_per_second_std": 2.8332251078321113,
+      "images_per_second_p50": 830.266855645967,
+      "images_per_second_p90": 834.1486196413338,
+      "images_per_second_p99": 835.0220165402912,
+      "us_per_image_mean": 1203.0061009266713,
+      "us_per_image_p50": 1204.4320367600085,
+      "us_per_image_p90": 1206.6081792240075,
+      "us_per_image_p99": 1207.0978112784073,
+      "raw_times_s": [
+        60.221601838000424,
+        59.871702558999914,
+        60.35761074200036
+      ],
+      "raw_throughput_ips": [
+        830.266855645967,
+        835.1190606401755,
+        828.3959451895115
+      ]
+    },
+    {
+      "num_workers": 4,
+      "num_warmup": 1,
+      "images_per_second_mean": 1273.033501106702,
+      "images_per_second_std": 1.930658293994749,
+      "images_per_second_p50": 1272.035914260243,
+      "images_per_second_p90": 1274.9938869044843,
+      "images_per_second_p99": 1275.6594307494386,
+      "us_per_image_mean": 785.5270870199971,
+      "us_per_image_p50": 786.1413257200002,
+      "us_per_image_p90": 786.4899353839974,
+      "us_per_image_p99": 786.5683725583967,
+      "raw_times_s": [
+        39.30706628600001,
+        39.32885438999983,
+        39.19314237699973
+      ],
+      "raw_throughput_ips": [
+        1272.035914260243,
+        1271.3312089943186,
+        1275.7333800655447
+      ]
+    },
+    {
+      "num_workers": 8,
+      "num_warmup": 1,
+      "images_per_second_mean": 1234.2800305725266,
+      "images_per_second_std": 20.960958571810913,
+      "images_per_second_p50": 1233.979880876117,
+      "images_per_second_p90": 1254.8764689065565,
+      "images_per_second_p99": 1259.5782012134055,
+      "us_per_image_mean": 810.4225901133365,
+      "us_per_image_p50": 810.3859840000041,
+      "us_per_image_p90": 823.9126877920025,
+      "us_per_image_p99": 826.9561961452022,
+      "raw_times_s": [
+        39.67937113000016,
+        41.36471818700011,
+        40.519299200000205
+      ],
+      "raw_throughput_ips": [
+        1260.1006159141664,
+        1208.759594927296,
+        1233.979880876117
+      ]
+    }
+  ],
+  "num_images": 50000,
+  "num_images_total": 50000,
+  "num_images_decoded": 50000,
+  "num_images_skipped": 0,
+  "skip_rate": 0.0,
+  "skip_indices": [],
+  "skip_examples": [],
+  "num_runs": 3
+}

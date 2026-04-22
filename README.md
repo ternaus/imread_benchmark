@@ -2,14 +2,65 @@
 
 ## Overview
 
-Benchmarks the speed of reading JPEG images and converting them to RGB numpy arrays across popular Python libraries. Targets machine learning training pipelines on **macOS ARM64 (Apple M-series)** using the ImageNet validation set.
+Benchmarks the speed of reading JPEG images and converting them to RGB numpy arrays across popular Python libraries. Targets machine learning training pipelines, measured across multiple CPU architectures (Intel Xeon, AMD EPYC, ARM Neoverse, Apple M-series) using the ImageNet validation set.
 
+## Results
 
-|                                         |
-| --------------------------------------- |
-|                                         |
-| Performance on Apple Silicon (M-series) |
+The two tables below are auto-generated from `output/<platform>/*.json` by [tools/render_readme.py](tools/render_readme.py). To refresh after a new run:
 
+```bash
+imread-benchmark render-readme
+```
+
+### Single-thread decode throughput (img/s)
+
+Pure decode speed with one thread, bytes pre-loaded to memory. **Bold** = best per platform.
+
+<!-- BENCH:single_thread:start -->
+
+| Library | AMD EPYC 9B14 | AMD EPYC 9B45 | Intel Xeon Platinum 8581C | Neoverse-N1 | Neoverse-V2 |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| `simplejpeg` | **690** | 857 | **735** | 456 | **662** |
+| `turbojpeg` | 640 | 818 | 708 | 426 | 613 |
+| `jpeg4py` | 636 | 760 | 699 | 423 | 611 |
+| `kornia-rs` | 642 | 761 | 664 | 391 | 629 |
+| `opencv` | 664 | 841 | 721 | 445 | 645 |
+| `imagecodecs` | 677 | 775 | 723 | **457** | 661 |
+| `pyvips` | 420 | 586 | 462 | 261 | 413 |
+| `pillow` | 537 | 726 | 577 | 360 | 551 |
+| `skimage` | 475 | 661 | 525 | 326 | 499 |
+| `imageio` | 496 | 599 | 524 | 335 | 506 |
+| `torchvision` | 621 | **864** | 712 | 440 | 643 |
+| `tensorflow` | 596 | 836 | 689 | 268 | 391 |
+
+<!-- BENCH:single_thread:end -->
+
+### Peak DataLoader throughput (img/s)
+
+Best `images_per_second` across `num_workers ∈ {0, 2, 4, 8}` for each library × platform, using a PyTorch DataLoader with `batch_size=32`. Cell format: `img/s @ Nw`. **Bold** = best per platform.
+
+<!-- BENCH:dataloader:start -->
+
+| Library | AMD EPYC 9B14 | AMD EPYC 9B45 | Intel Xeon Platinum 8581C | Neoverse-N1 | Neoverse-V2 |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| `simplejpeg` | 1,521 @ 4w | 2,739 @ 8w | **1,754 @ 8w** | **1,557 @ 8w** | 2,421 @ 8w |
+| `turbojpeg` | 1,535 @ 4w | 2,800 @ 8w | 1,710 @ 8w | 1,347 @ 4w | 2,389 @ 8w |
+| `jpeg4py` | 1,443 @ 4w | 2,453 @ 8w | 1,651 @ 8w | 1,411 @ 8w | 2,312 @ 8w |
+| `kornia-rs` | 1,327 @ 8w | 2,394 @ 8w | 1,422 @ 8w | 1,260 @ 8w | 1,951 @ 8w |
+| `opencv` | 1,457 @ 4w | 2,814 @ 8w | 1,707 @ 8w | 1,419 @ 8w | 2,414 @ 8w |
+| `imagecodecs` | 1,543 @ 4w | 2,476 @ 8w | 1,677 @ 8w | 1,443 @ 8w | 2,242 @ 8w |
+| `pillow` | 1,283 @ 4w | 2,465 @ 8w | 1,565 @ 8w | 1,387 @ 8w | 2,350 @ 8w |
+| `skimage` | 1,238 @ 4w | 2,536 @ 8w | 1,615 @ 8w | 1,388 @ 8w | 2,315 @ 8w |
+| `imageio` | 1,273 @ 4w | 2,324 @ 8w | 1,643 @ 8w | 1,466 @ 8w | **2,561 @ 8w** |
+| `torchvision` | **1,596 @ 8w** | **2,920 @ 8w** | 1,612 @ 4w | 1,504 @ 8w | 2,557 @ 8w |
+
+<!-- BENCH:dataloader:end -->
+
+<!-- BENCH:metadata:start -->
+
+_**5 platforms** · 50,000 images · 5 runs each · latest run 2026-04-22_
+
+<!-- BENCH:metadata:end -->
 
 ## GitAds Sponsored
 
@@ -54,8 +105,8 @@ On Linux you'll still need `apt install libjpeg-turbo8-dev libturbojpeg0`
 pip install uv
 
 # Install the orchestrator (control-plane) into a venv.
-# Per-library worker venvs (mainstream / tensorflow / pillow-simd) are
-# created lazily on first run, with the right libjpeg-turbo / libvips deps.
+# Per-library worker venvs (mainstream / tensorflow) are created lazily on
+# first run, with the right libjpeg-turbo / libvips deps.
 uv venv && source .venv/bin/activate
 uv pip install -e .
 ```
@@ -128,9 +179,14 @@ output/
 ### Standard libjpeg
 
 - **Pillow**
-- **Pillow-SIMD** (**Linux x86-64 only**)
 - **scikit-image**
 - **imageio**
+
+> **Note:** Pillow-SIMD was previously included but dropped 2026-04 —
+> upstream is abandoned (last release 2023-05), no Linux wheels, and its
+> historical SIMD speedup is now matched by `jpeg4py` / `simplejpeg` /
+> `kornia-rs`. Full rationale in
+> [`docs/gcp_benchmarks.md`](docs/gcp_benchmarks.md#why-no-pillow-simd).
 
 ### ML framework components
 

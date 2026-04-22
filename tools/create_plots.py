@@ -6,90 +6,24 @@ each result's recorded `system_info`, so adding a new platform is zero-config.
 
 Run via the CLI:
     imread-benchmark plot --input output --output _internal/plots
+
+Or directly (from the repo root):
+    python -m tools.create_plots --input output --output _internal/plots
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+from tools._results import load_results
+
 sns.set_theme(style="whitegrid", font="Arial")
 sns.set_context("paper", font_scale=1.5)
-
-
-def _extract_throughput(results: dict) -> tuple[float | None, float | None]:
-    """
-    Read mean / std img/s from a benchmark_results dict.
-
-    New format (post-Track 2b): images_per_second_mean / _std as floats.
-    Legacy format (older runs): images_per_second as "MEAN ± STD" string.
-    """
-    mean = results.get("images_per_second_mean")
-    std = results.get("images_per_second_std")
-    if mean is not None:
-        return float(mean), float(std) if std is not None else None
-
-    legacy = results.get("images_per_second")
-    if isinstance(legacy, str) and "±" in legacy:
-        m_str, s_str = legacy.split("±")
-        try:
-            return float(m_str.strip()), float(s_str.strip())
-        except ValueError:
-            return None, None
-    return None, None
-
-
-def load_results(input_dir: Path) -> pd.DataFrame:
-    """
-    Load every output/<platform>/<lib>_<N>t_results.json into a DataFrame.
-
-    Columns: platform, library, num_threads, num_images, num_runs,
-             images_per_second, std_dev, p50, p90, p99, us_per_image,
-             cpu_brand, os_name.
-    """
-    rows: list[dict] = []
-    for platform_dir in sorted(p for p in input_dir.iterdir() if p.is_dir()):
-        platform = platform_dir.name
-        for result_file in sorted(platform_dir.glob("*_results.json")):
-            # Skip dataloader files — they have a different schema and a separate plotter.
-            if result_file.name.endswith("_dataloader_results.json"):
-                continue
-            with result_file.open() as f:
-                data = json.load(f)
-
-            results = data.get("benchmark_results", {})
-            sysinfo = data.get("system_info", {})
-            cpu = sysinfo.get("CPU", {}) if isinstance(sysinfo.get("CPU"), dict) else {}
-
-            library = data["library"]
-            if library == "kornia":
-                library = "kornia-rs"
-
-            mean_ips, std_ips = _extract_throughput(results)
-
-            rows.append(
-                {
-                    "platform": platform,
-                    "library": library,
-                    "num_threads": data.get("num_threads") or 1,
-                    "num_images": data.get("num_images"),
-                    "num_runs": data.get("num_runs"),
-                    "images_per_second": mean_ips,
-                    "std_dev": std_ips,
-                    "p50": results.get("images_per_second_p50"),
-                    "p90": results.get("images_per_second_p90"),
-                    "p99": results.get("images_per_second_p99"),
-                    "us_per_image": results.get("us_per_image_mean"),
-                    "cpu_brand": cpu.get("brand_raw", "Unknown CPU"),
-                    "os_name": sysinfo.get("OS", platform.split("_")[0].title()),
-                },
-            )
-    return pd.DataFrame(rows)
 
 
 def _title_for_platform(df_platform: pd.DataFrame) -> str:

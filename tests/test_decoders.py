@@ -53,7 +53,7 @@ def test_decode_nonzero_output(decoder_cls, jpeg_bytes):
 # Catches mistakes in new-decoder PRs (missing `name`, wrong `group`, broken
 # entry-point, etc.) before CI tries to install the library.
 
-ALLOWED_GROUPS = {"mainstream", "tensorflow", "pillow-simd"}
+ALLOWED_GROUPS = {"mainstream", "tensorflow"}
 
 
 @pytest.mark.parametrize(("name", "cls"), list(REGISTRY.items()))
@@ -81,7 +81,6 @@ def test_registry_has_known_decoders():
         "imagecodecs",
         "pyvips",
         "jpeg4py",
-        "pillow-simd",
     }
     missing = expected - set(REGISTRY)
     assert not missing, f"Registry missing decoders (broken pyproject entry-points?): {sorted(missing)}"

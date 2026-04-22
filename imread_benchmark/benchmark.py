@@ -10,6 +10,19 @@ if TYPE_CHECKING:
 import numpy as np
 from tqdm import tqdm
 
+# Bound on retained error strings — enough to triage in the JSON without
+# bloating the file when a decoder rejects a large slice of the dataset.
+MAX_SKIP_EXAMPLES = 3
+
+# If a decoder fails on every single item it's not "decoder X has a 100% skip
+# rate", it's "decoder X is fundamentally broken in this venv / on this build"
+# — surface as an exception so the CLI marks the run as failed, not as a
+# valid result with zero throughput.
+_ALL_FAILED_TEMPLATE = (
+    "Decoder failed on all {n} items during discovery pass. "
+    "First error: {err}. This is treated as a decoder failure, not a skip rate."
+)
+
 
 def _summarise(times_per_run_s: list[float], n_items: int) -> dict[str, Any]:
     """
@@ -41,6 +54,38 @@ def _summarise(times_per_run_s: list[float], n_items: int) -> dict[str, Any]:
     }
 
 
+def _discover_skips(
+    decode_fn: Callable[[Any], np.ndarray],
+    items: Sequence[Any],
+) -> tuple[list[int], list[str]]:
+    """
+    Single un-timed pass to identify items the decoder cannot handle.
+
+    Real ImageNet val contains a handful of non-standard JPEGs (CMYK, RGBA-
+    embedded, weird subsampling) that strict decoders like turbojpeg, jpeg4py,
+    and kornia-rs refuse with errors like "Unsupported color conversion
+    request". Tolerant decoders (Pillow, OpenCV, scikit-image) silently
+    convert. Treating these as fatal would bury 99.99% of clean numbers under
+    a single bad image, so we identify them up front and skip them in every
+    subsequent pass — and report skip count + sample errors in the JSON so
+    the paper can surface decoder robustness as a real property.
+    """
+    skipped: list[int] = []
+    examples: list[str] = []
+    for idx, item in enumerate(items):
+        try:
+            decode_fn(item)
+        # Decoder libs raise everything from OSError to ValueError to custom
+        # exception types (jpeg4py.JPEGRuntimeError). We genuinely want to
+        # catch them all — anything that prevents successful decode of one
+        # item is a "skip", regardless of how the library chose to express it.
+        except Exception as exc:
+            skipped.append(idx)
+            if len(examples) < MAX_SKIP_EXAMPLES:
+                examples.append(f"idx={idx}: {type(exc).__name__}: {exc}")
+    return skipped, examples
+
+
 def run_timing_loop(
     decode_fn: Callable[[Any], np.ndarray],
     items: Sequence[Any],
@@ -52,9 +97,29 @@ def run_timing_loop(
 
     items is either list[bytes] (memory mode) or list[str] (disk mode).
     GC is disabled inside each timed pass to avoid mid-run pauses skewing tail latencies.
+
+    Bad items (those that raise during decode — typically <0.1% of ImageNet val
+    for strict decoders) are identified in a single discovery pass and excluded
+    from every subsequent pass. Skip counts and sample errors are returned in
+    the result so the paper can report decoder robustness honestly.
     """
-    for _ in range(num_warmup):
-        for item in items:
+    skipped_indices, skip_examples = _discover_skips(decode_fn, items)
+    n_total = len(items)
+    n_skipped = len(skipped_indices)
+    n_good = n_total - n_skipped
+
+    if n_good == 0:
+        first_err = skip_examples[0] if skip_examples else "no example captured"
+        raise RuntimeError(_ALL_FAILED_TEMPLATE.format(n=n_total, err=first_err))
+
+    skip_set = set(skipped_indices)
+    good_items = [it for i, it in enumerate(items) if i not in skip_set]
+
+    # The discovery pass already consumed one warmup's worth of work; subtract
+    # one so we don't double-pay (and don't go negative).
+    remaining_warmup = max(0, num_warmup - 1)
+    for _ in range(remaining_warmup):
+        for item in good_items:
             decode_fn(item)
 
     times: list[float] = []
@@ -63,11 +128,18 @@ def run_timing_loop(
         gc.disable()
         try:
             t0 = time.perf_counter()
-            for item in items:
+            for item in good_items:
                 decode_fn(item)
             elapsed = time.perf_counter() - t0
         finally:
             gc.enable()
         times.append(elapsed)
 
-    return _summarise(times, len(items))
+    summary = _summarise(times, n_good)
+    summary["num_images_total"] = n_total
+    summary["num_images_decoded"] = n_good
+    summary["num_images_skipped"] = n_skipped
+    summary["skip_rate"] = n_skipped / n_total if n_total else 0.0
+    summary["skip_indices"] = skipped_indices
+    summary["skip_examples"] = skip_examples
+    return summary

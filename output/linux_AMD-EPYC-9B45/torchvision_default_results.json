@@ -1,0 +1,53 @@
+{
+  "library": "torchvision",
+  "mode": "memory",
+  "run_tag": "default",
+  "requested_threads": 0,
+  "effective_threads": 8,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:35:04 UTC 2026",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 9B45",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "torchvision": "0.26.0+cpu"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 862.5291251924225,
+    "images_per_second_std": 1.5854445860525863,
+    "images_per_second_p50": 861.8019568641548,
+    "images_per_second_p90": 864.4456385912289,
+    "images_per_second_p99": 864.7045477219382,
+    "us_per_image_mean": 1159.3850551239884,
+    "us_per_image_p50": 1160.3593981599988,
+    "us_per_image_p90": 1161.5221312879876,
+    "us_per_image_p99": 1162.0491179287842,
+    "raw_times_s": [
+      57.86942440799976,
+      58.03219101099967,
+      58.105383599999186,
+      58.01796990799994,
+      57.82129485399855
+    ],
+    "raw_throughput_ips": [
+      864.0141233733801,
+      861.5907676227973,
+      860.5054626986527,
+      861.8019568641548,
+      864.7333154031281
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 50000,
+    "num_images_skipped": 0,
+    "skip_rate": 0.0,
+    "skip_indices": [],
+    "skip_examples": []
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}
