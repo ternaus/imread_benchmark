@@ -21,7 +21,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dev dependencies
-        run: uv sync --extra dev
+        run: uv sync --group dev
 
       - name: Run pre-commit
         run: uv run pre-commit run --files $(find imread_benchmark tests -name "*.py" | tr '\n' ' ')
@@ -64,7 +64,7 @@ jobs:
       # torchvision, jpeg4py. With this, the cross-decoder agreement test
       # actually compares 11 libs instead of just pillow.
       - name: Install dev + mainstream deps
-        run: uv sync --extra dev --extra mainstream --python ${{ matrix.python-version }}
+        run: uv sync --group dev --extra mainstream --python ${{ matrix.python-version }}
 
       - name: Run tests
         run: uv run --python ${{ matrix.python-version }} pytest tests/ -v

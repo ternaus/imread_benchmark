@@ -4,7 +4,7 @@
 
 ```bash
 pip install uv
-uv sync --extra dev
+uv sync --group dev
 ```
 
 ## Local-only material (`_internal/`)
