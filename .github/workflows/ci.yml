@@ -21,7 +21,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dev dependencies
-        run: uv sync --extra dev
+        run: uv sync --group dev
 
       - name: Run pre-commit
         run: uv run pre-commit run --files $(find imread_benchmark tests -name "*.py" | tr '\n' ' ')
@@ -43,8 +43,28 @@ jobs:
       - name: Install Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install dev dependencies
-        run: uv sync --extra dev --python ${{ matrix.python-version }}
+      # System libs the [mainstream] wheels dlopen at import time:
+      #   libjpeg-turbo8-dev — jpeg4py (built from sdist, needs headers).
+      #   libturbojpeg0-dev  — provides libturbojpeg.so.0 reliably across
+      #                        Ubuntu releases (noble renamed the runtime-only
+      #                        package to `libturbojpeg`; the `0-dev` name is
+      #                        the transitional metapackage that pulls the
+      #                        correct .so on both jammy and noble).
+      # libvips arrives via the `pyvips-binary` PyPI wheel, no apt install.
+      # Mirrors gcp/vm_startup.sh for cloud-CI parity.
+      - name: Install system C libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libjpeg-turbo8-dev \
+            libturbojpeg0-dev
+
+      # `--extra mainstream` brings in opencv, skimage, imageio, kornia-rs,
+      # simplejpeg, PyTurboJPEG, imagecodecs, pyvips, Pillow, torch,
+      # torchvision, jpeg4py. With this, the cross-decoder agreement test
+      # actually compares 11 libs instead of just pillow.
+      - name: Install dev + mainstream deps
+        run: uv sync --group dev --extra mainstream --python ${{ matrix.python-version }}
 
       - name: Run tests
         run: uv run --python ${{ matrix.python-version }} pytest tests/ -v
@@ -58,5 +78,5 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
 
-      - name: Check run_benchmarks.sh
-        run: shellcheck --severity=warning run_benchmarks.sh
+      - name: Check GCP scripts
+        run: shellcheck --severity=warning gcp/*.sh

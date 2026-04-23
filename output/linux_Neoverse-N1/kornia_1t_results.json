@@ -1,0 +1,57 @@
+{
+  "library": "kornia",
+  "mode": "memory",
+  "run_tag": "1t",
+  "requested_threads": 1,
+  "effective_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:33:21 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-N1",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "kornia": "0.1.10"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 391.41907068301214,
+    "images_per_second_std": 0.6161184414713902,
+    "images_per_second_p50": 391.45582912517824,
+    "images_per_second_p90": 392.01595993194485,
+    "images_per_second_p99": 392.3161598240961,
+    "us_per_image_mean": 2554.8128676653505,
+    "us_per_image_p50": 2554.566634592696,
+    "us_per_image_p90": 2558.9115690273757,
+    "us_per_image_p99": 2561.1611942454792,
+    "raw_times_s": [
+      127.43484582400015,
+      127.70626912499938,
+      127.7555545209998,
+      128.06799621899972,
+      127.7257771630002
+    ],
+    "raw_throughput_ips": [
+      392.3495153676684,
+      391.51562677835955,
+      391.36458831448635,
+      390.4097938293683,
+      391.45582912517824
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 49999,
+    "num_images_skipped": 1,
+    "skip_rate": 2e-05,
+    "skip_indices": [
+      19876
+    ],
+    "skip_examples": [
+      "idx=19876: ValueError: Unsupported number of channels: 4"
+    ]
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

@@ -1,102 +1,57 @@
+"""
+Generate paper-quality plots from imread-benchmark JSON results.
+
+Reads numeric fields directly (no string parsing) and derives titles from
+each result's recorded `system_info`, so adding a new platform is zero-config.
+
+Run via the CLI:
+    imread-benchmark plot --input output --output _internal/plots
+
+Or directly (from the repo root):
+    python -m tools.create_plots --input output --output _internal/plots
+"""
+
 from __future__ import annotations
 
-import json
+import argparse
 from pathlib import Path
-from typing import NotRequired, TypedDict
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+from tools._results import load_results
+
 sns.set_theme(style="whitegrid", font="Arial")
 sns.set_context("paper", font_scale=1.5)
 
 
-class BenchmarkResults(TypedDict):
-    images_per_second: str
-    raw_times: list[float]
+def _title_for_platform(df_platform: pd.DataFrame) -> str:
+    """Build the figure title from the platform's recorded system_info, no hard-coded map."""
+    cpu = df_platform["cpu_brand"].iloc[0]
+    os_name = df_platform["os_name"].iloc[0]
+    return f"JPEG Decoding Speed — {os_name} / {cpu}"
 
 
-class SystemInfo(TypedDict):
-    Python: str
-    OS: str
-    OS_Version: NotRequired[str]
-    Machine: str
-    CPU: dict
-    imageio: NotRequired[str]
-    kornia: NotRequired[str]
-    opencv: NotRequired[str]
-    skimage: NotRequired[str]
-    tensorflow: NotRequired[str]
-    torchvision: NotRequired[str]
-
-
-class ResultData(TypedDict):
-    library: str
-    system_info: SystemInfo
-    benchmark_results: BenchmarkResults
-    num_images: int
-    num_runs: int
-
-
-def load_results(path: str | Path) -> pd.DataFrame:
-    """Load all JSON results and convert to DataFrame."""
-    results: list[dict] = []
-    path = Path(path)
-
-    for platform_dir in path.iterdir():
-        if not platform_dir.is_dir():
-            continue
-
-        platform = platform_dir.name
-
-        for result_file in platform_dir.glob("*_results.json"):
-            with result_file.open() as f:
-                data: ResultData = json.load(f)
-
-            library = data["library"]
-            if library == "kornia":
-                library = "kornia-rs"
-
-            mean_str, std_str = data["benchmark_results"]["images_per_second"].split("±")
-            mean = float(mean_str.strip())
-            std = float(std_str.strip())
-
-            results.append(
-                {
-                    "platform": platform,
-                    "library": library,
-                    "images_per_second": mean,
-                    "std_dev": std,
-                },
-            )
-
-    return pd.DataFrame(results)
-
-
-def plot_platform_performance(df: pd.DataFrame, platform: str, output_path: str | Path) -> None:
-    """Create a publication-quality horizontal bar plot optimized for two-column paper format."""
+def plot_platform_performance(df: pd.DataFrame, platform: str, output_path: Path) -> None:
     plt.style.use("default")
     sns.set_theme(style="whitegrid", font="Arial")
 
-    platform_data = df[df["platform"] == platform].copy()
-    platform_data = platform_data.sort_values("images_per_second", ascending=True)
+    # Single-thread snapshot only (avoids mixing 1-thread and N-thread bars).
+    pdata = df[(df["platform"] == platform) & (df["num_threads"] == 1)].copy()
+    if pdata.empty:
+        return
+    pdata = pdata.sort_values("images_per_second", ascending=True)
 
-    # Figure size for two-column paper
     plt.figure(figsize=(7, 5))
-
-    # Generate colors
-    n_bars = len(platform_data)
+    n_bars = len(pdata)
     colors = sns.color_palette("Blues", n_colors=n_bars)
+    bars = plt.barh(range(len(pdata)), pdata["images_per_second"], height=0.7, color=colors)
 
-    # Create horizontal bars
-    bars = plt.barh(range(len(platform_data)), platform_data["images_per_second"], height=0.7, color=colors)
-
-    # Add error bars
     plt.errorbar(
-        platform_data["images_per_second"],
-        range(len(platform_data)),
-        xerr=platform_data["std_dev"],
+        pdata["images_per_second"],
+        range(len(pdata)),
+        xerr=pdata["std_dev"],
         fmt="none",
         color="black",
         capsize=4,
@@ -104,7 +59,6 @@ def plot_platform_performance(df: pd.DataFrame, platform: str, output_path: str 
         linewidth=1.5,
     )
 
-    # Add value labels inside bars
     for i, bar in enumerate(bars):
         width = bar.get_width()
         text_color = "white" if i > n_bars / 2 else "black"
@@ -119,41 +73,34 @@ def plot_platform_performance(df: pd.DataFrame, platform: str, output_path: str 
             fontweight="bold",
         )
 
-    # Concise, single-line titles
-    platform_titles = {
-        "darwin": "JPEG Decoding Speed (Apple M4 Max)",
-        "linux": "JPEG Decoding Speed (AMD Threadripper 3970X)",
-    }
-    plt.title(platform_titles[platform], pad=20, fontsize=16, fontweight="bold")
-    plt.xlabel("Images per Second", fontsize=14, fontweight="bold")
-    plt.yticks(range(len(platform_data)), platform_data["library"], fontsize=14)
+    plt.title(_title_for_platform(pdata), pad=20, fontsize=14, fontweight="bold")
+    plt.xlabel("Images per Second (1 thread)", fontsize=14, fontweight="bold")
+    plt.yticks(range(len(pdata)), pdata["library"], fontsize=14)
 
-    # Thicker axis lines
     plt.gca().spines["left"].set_linewidth(1.5)
     plt.gca().spines["bottom"].set_linewidth(1.5)
-
-    # Adjust grid
     plt.grid(True, axis="x", linestyle="--", alpha=0.3, linewidth=1.5)
-
-    # Adjust layout
     plt.tight_layout(pad=1.2)
-
-    # Save plot
     plt.savefig(output_path, dpi=600, bbox_inches="tight")
     plt.close()
 
 
 def main() -> None:
-    # Load and process data
-    df = load_results("output")
+    parser = argparse.ArgumentParser(description="Plot imread-benchmark single-thread results.")
+    parser.add_argument("--input", type=Path, default=Path("output"))
+    parser.add_argument("--output", type=Path, default=Path("_internal/plots"))
+    args = parser.parse_args()
 
-    # Plots are written under gitignored `_internal/plots/` (see CONTRIBUTING.md).
-    out_dir = Path("_internal/plots")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    df = load_results(args.input)
+    if df.empty:
+        print(f"No results found under {args.input}/<platform>/*_results.json")
+        return
 
-    # Create separate plots for each platform
-    plot_platform_performance(df, "darwin", out_dir / "performance_darwin.png")
-    plot_platform_performance(df, "linux", out_dir / "performance_linux.png")
+    args.output.mkdir(parents=True, exist_ok=True)
+    for platform in sorted(df["platform"].unique()):
+        out_file = args.output / f"performance_{platform}.png"
+        plot_platform_performance(df, platform, out_file)
+        print(f"wrote {out_file}")
 
 
 if __name__ == "__main__":

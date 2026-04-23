@@ -1,0 +1,53 @@
+{
+  "library": "tensorflow",
+  "mode": "memory",
+  "run_tag": "1t",
+  "requested_threads": 1,
+  "effective_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:33:21 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-N1",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "tensorflow": "2.21.0"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 267.69159756308864,
+    "images_per_second_std": 0.3398725269853197,
+    "images_per_second_p50": 267.7959616714494,
+    "images_per_second_p90": 267.97783051334,
+    "images_per_second_p99": 268.0284921409596,
+    "us_per_image_mean": 3735.648123840001,
+    "us_per_image_p50": 3734.1862579200097,
+    "us_per_image_p90": 3741.0597979079903,
+    "us_per_image_p99": 3744.230761492797,
+    "raw_times_s": [
+      187.22915453899986,
+      186.64140674100054,
+      186.788742929999,
+      186.5434138540004,
+      186.70931289600048
+    ],
+    "raw_throughput_ips": [
+      267.05242633344795,
+      267.8933944673073,
+      267.68208413254337,
+      268.0341212106951,
+      267.7959616714494
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 50000,
+    "num_images_skipped": 0,
+    "skip_rate": 0.0,
+    "skip_indices": [],
+    "skip_examples": []
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

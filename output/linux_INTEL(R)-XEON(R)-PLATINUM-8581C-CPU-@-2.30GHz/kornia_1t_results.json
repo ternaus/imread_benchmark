@@ -1,0 +1,57 @@
+{
+  "library": "kornia",
+  "mode": "memory",
+  "run_tag": "1t",
+  "requested_threads": 1,
+  "effective_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:35:04 UTC 2026",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "INTEL(R) XEON(R) PLATINUM 8581C CPU @ 2.30GHz",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "kornia": "0.1.10"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 663.6562498250526,
+    "images_per_second_std": 0.523317539325529,
+    "images_per_second_p50": 663.6910695229949,
+    "images_per_second_p90": 664.1193681771842,
+    "images_per_second_p99": 664.1301779145743,
+    "us_per_image_mean": 1506.805100606018,
+    "us_per_image_p50": 1506.725110402217,
+    "us_per_image_p90": 1508.1146493769847,
+    "us_per_image_p99": 1508.923450351396,
+    "raw_times_s": [
+      75.28480294900055,
+      75.33474879500045,
+      75.33682562100057,
+      75.4491568429994,
+      75.28820691800047
+    ],
+    "raw_throughput_ips": [
+      664.1313789965066,
+      663.6910695229949,
+      663.6727734127212,
+      662.6846752448392,
+      664.1013519482009
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 49999,
+    "num_images_skipped": 1,
+    "skip_rate": 2e-05,
+    "skip_indices": [
+      19876
+    ],
+    "skip_examples": [
+      "idx=19876: ValueError: Unsupported number of channels: 4"
+    ]
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

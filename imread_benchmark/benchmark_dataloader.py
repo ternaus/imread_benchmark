@@ -6,7 +6,8 @@ PyTorch DataLoader with varying numbers of worker processes. Each worker
 decodes from pre-loaded in-memory bytes, so disk I/O is excluded.
 
 Usage:
-    BENCHMARK_LIBRARY=opencv python imread_benchmark/benchmark_dataloader.py \
+    python -m imread_benchmark.benchmark_dataloader \
+        --library opencv \
         --data-dir /path/to/imagenet/val \
         --output-dir output
 """
@@ -14,9 +15,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
 import numpy as np
 from tqdm import tqdm
 
+from imread_benchmark.benchmark import _discover_skips, _summarise
 from imread_benchmark.decoders import REGISTRY
 from imread_benchmark.utils import collect_jpeg_paths, get_package_versions, get_system_identifier
 
@@ -57,7 +59,19 @@ def _collate(batch: list[np.ndarray]) -> list[np.ndarray]:
     return batch
 
 
-def benchmark_workers(dataset: InMemoryDataset, num_workers: int, num_runs: int) -> dict[str, Any]:
+def benchmark_workers(
+    dataset: InMemoryDataset,
+    num_workers: int,
+    num_runs: int,
+    num_warmup: int = 1,
+) -> dict[str, Any]:
+    """
+    Iterate `dataset` through a DataLoader `num_runs` times and return throughput stats.
+
+    Warmup is critical for `num_workers > 0`: spawning worker processes (and on
+    Linux fork() then re-importing libs in the worker) is wall-clock dominant
+    on the first iteration and would skew the mean / p50.
+    """
     from torch.utils.data import DataLoader
 
     loader = DataLoader(
@@ -69,33 +83,35 @@ def benchmark_workers(dataset: InMemoryDataset, num_workers: int, num_runs: int)
         persistent_workers=(num_workers > 0),
     )
 
-    throughputs: list[float] = []
+    for _ in range(num_warmup):
+        for _ in loader:
+            pass
+
+    times_s: list[float] = []
     n_images = len(dataset)
 
-    for run_idx in tqdm(range(num_runs), desc=f"workers={num_workers}"):
-        t0 = time.perf_counter()
-        consumed = 0
-        for batch in loader:
-            consumed += len(batch)
-        elapsed = time.perf_counter() - t0
-        if run_idx == 0:
-            # First run includes worker startup overhead; keep it for transparency
-            pass
-        throughputs.append(n_images / elapsed)
+    for _ in tqdm(range(num_runs), desc=f"workers={num_workers}"):
+        gc.collect()
+        gc.disable()
+        try:
+            t0 = time.perf_counter()
+            for _ in loader:
+                pass
+            elapsed = time.perf_counter() - t0
+        finally:
+            gc.enable()
+        times_s.append(elapsed)
 
-    mean_ips = float(np.mean(throughputs))
-    std_ips = float(np.std(throughputs))
     return {
         "num_workers": num_workers,
-        "images_per_second": f"{mean_ips:.2f} ± {std_ips:.2f}",
-        "images_per_second_mean": mean_ips,
-        "images_per_second_std": std_ips,
-        "raw_times": throughputs,
+        "num_warmup": num_warmup,
+        **_summarise(times_s, n_images),
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="DataLoader throughput benchmark for JPEG decoding.")
+    parser.add_argument("-l", "--library", required=True, help=f"One of: {', '.join(sorted(REGISTRY))}")
     parser.add_argument("-d", "--data-dir", required=True)
     parser.add_argument("-n", "--num-images", type=int, default=2000)
     parser.add_argument("-r", "--num-runs", type=int, default=5)
@@ -110,10 +126,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    library = os.environ.get("BENCHMARK_LIBRARY")
-    if not library:
-        parser.error("BENCHMARK_LIBRARY environment variable must be set")
-
+    library = args.library
     decoder_cls = REGISTRY.get(library)
     if decoder_cls is None:
         parser.error(f"Unknown library '{library}'. Supported: {', '.join(REGISTRY)}")
@@ -128,32 +141,73 @@ def main() -> None:
     logger.info("Pre-loading %d images into memory…", len(image_paths))
     images_bytes = [p.read_bytes() for p in image_paths]
 
-    dataset = InMemoryDataset(images_bytes, decoder.decode)
+    # Filter out items the decoder cannot handle (CMYK / RGBA / weird subsampling
+    # JPEGs that exist in real ImageNet val). Doing this once on the main
+    # process, before spawning DataLoader workers, means:
+    #   1. Worker subprocesses never raise mid-batch and tear down the loader.
+    #   2. Every num_workers config is benchmarked on the exact same item set,
+    #      so the comparison across worker counts stays apples-to-apples.
+    skipped_indices, skip_examples = _discover_skips(decoder.decode, images_bytes)
+    if len(skipped_indices) == len(images_bytes):
+        first_err = skip_examples[0] if skip_examples else "no example captured"
+        msg = f"Decoder {library!r} failed on all {len(images_bytes)} items. First error: {first_err}"
+        raise RuntimeError(msg)
+    if skipped_indices:
+        logger.warning(
+            "Decoder %s skipped %d/%d items (%.4f%%): %s",
+            library,
+            len(skipped_indices),
+            len(images_bytes),
+            100.0 * len(skipped_indices) / len(images_bytes),
+            "; ".join(skip_examples),
+        )
+    skip_set = set(skipped_indices)
+    good_bytes = [b for i, b in enumerate(images_bytes) if i not in skip_set]
 
-    worker_results = []
-    for n in args.workers:
-        logger.info("Benchmarking with num_workers=%d", n)
-        result = benchmark_workers(dataset, n, args.num_runs)
-        worker_results.append(result)
+    dataset = InMemoryDataset(good_bytes, decoder.decode)
 
     system_id = get_system_identifier()
     output_dir = args.output_dir / system_id
     output_dir.mkdir(parents=True, exist_ok=True)
+    output_file = output_dir / f"{library}_dataloader_results.json"
 
-    results = {
+    results: dict[str, Any] = {
         "library": library,
         "benchmark_type": "dataloader",
         "batch_size": BATCH_SIZE,
         "num_threads": decoder.get_num_threads(),
         "system_info": get_package_versions(library),
-        "worker_results": worker_results,
-        "num_images": len(image_paths),
+        "worker_results": [],
+        # `num_images` retained as the count actually fed to the DataLoader
+        # (post-skip), so backwards-compatible plotting (which divides total
+        # time by num_images for throughput sanity-checks) keeps working.
+        "num_images": len(good_bytes),
+        "num_images_total": len(image_paths),
+        "num_images_decoded": len(good_bytes),
+        "num_images_skipped": len(skipped_indices),
+        "skip_rate": len(skipped_indices) / len(image_paths) if image_paths else 0.0,
+        "skip_indices": skipped_indices,
+        "skip_examples": skip_examples,
         "num_runs": args.num_runs,
     }
 
-    output_file = output_dir / f"{library}_dataloader_results.json"
-    with output_file.open("w") as f:
-        json.dump(results, f, indent=2)
+    # Write after every num_workers config so a hang on a later config (e.g.
+    # pyvips fork-deadlock at num_workers=8) doesn't lose the earlier results.
+    # The background `gcloud storage rsync` in vm_startup.sh ships these files
+    # to GCS within 30s of being written, so progress is durable.
+    for n in args.workers:
+        logger.info("Benchmarking with num_workers=%d", n)
+        result = benchmark_workers(dataset, n, args.num_runs)
+        results["worker_results"].append(result)
+        with output_file.open("w") as f:
+            json.dump(results, f, indent=2)
+        logger.info(
+            "Saved progress (%d/%d configs) to %s",
+            len(results["worker_results"]),
+            len(args.workers),
+            output_file,
+        )
+
     logger.info("Results saved to %s", output_file)
 
 

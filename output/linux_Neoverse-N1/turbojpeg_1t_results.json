@@ -1,0 +1,57 @@
+{
+  "library": "turbojpeg",
+  "mode": "memory",
+  "run_tag": "1t",
+  "requested_threads": 1,
+  "effective_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:33:21 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-N1",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "turbojpeg": "1.8.3"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 425.69061060919796,
+    "images_per_second_std": 0.6740763890060237,
+    "images_per_second_p50": 425.92860881649796,
+    "images_per_second_p90": 426.3755508617412,
+    "images_per_second_p99": 426.39170186011876,
+    "us_per_image_mean": 2349.1298223644635,
+    "us_per_image_p50": 2347.8112981859554,
+    "us_per_image_p90": 2353.6221634072726,
+    "us_per_image_p99": 2353.903612118625,
+    "raw_times_s": [
+      117.26023126600194,
+      117.65530095800204,
+      117.69439027499902,
+      117.38821709799959,
+      117.27257034500144
+    ],
+    "raw_throughput_ips": [
+      426.39349641549404,
+      424.96172797048496,
+      424.8205873124008,
+      425.92860881649796,
+      426.348632531112
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 49999,
+    "num_images_skipped": 1,
+    "skip_rate": 2e-05,
+    "skip_indices": [
+      19876
+    ],
+    "skip_examples": [
+      "idx=19876: OSError: Unsupported color conversion request"
+    ]
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

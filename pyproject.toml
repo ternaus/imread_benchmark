@@ -18,8 +18,54 @@ dependencies = [
   "pandas",
   "py-cpuinfo",
   "tqdm",
+  "typer>=0.12",
 ]
-optional-dependencies.dev = [
+# Two groups, not thirteen. Real conflicts only exist between these two:
+#   tensorflow vs torch  — numpy/protobuf pin fights
+# Everything else (opencv, skimage, imageio, kornia-rs, simplejpeg, turbojpeg,
+# imagecodecs, pyvips, jpeg4py, torch, torchvision, Pillow) coexists in one venv.
+#
+# Pillow-SIMD WAS a third group (incompatible with mainstream Pillow). Dropped
+# 2026-04 — see docs/gcp_benchmarks.md "Why no Pillow-SIMD?" for rationale.
+optional-dependencies.mainstream = [
+  "imagecodecs",
+  "imageio",
+  "jpeg4py; sys_platform=='linux'",
+  "kornia-rs",
+  "opencv-python-headless",
+  "pillow",
+  "pyturbojpeg<2",
+  "pyvips",
+  # Bundled libvips wheels (Linux x86/arm + macOS x86/arm + Windows). Lets
+  # pyvips run in CFFI API mode without `apt install libvips-dev` /
+  # `brew install vips`, killing ~150 packages of GLib/GTK closure on the VM.
+  "pyvips-binary>=8.18",
+  "scikit-image",
+  "simplejpeg",
+  "torch",
+  "torchvision",
+]
+optional-dependencies.plot = [ "matplotlib>=3.8", "seaborn>=0.13" ]
+optional-dependencies.tensorflow = [ "tensorflow" ]
+scripts.imread-benchmark = "imread_benchmark.cli:app"
+entry-points."imread_benchmark.decoders".imagecodecs = "imread_benchmark.decoders.imagecodecs_decoder:ImageCodecsDecoder"
+entry-points."imread_benchmark.decoders".imageio = "imread_benchmark.decoders.imageio_decoder:ImageIODecoder"
+entry-points."imread_benchmark.decoders".jpeg4py = "imread_benchmark.decoders.jpeg4py_decoder:Jpeg4pyDecoder"
+entry-points."imread_benchmark.decoders".kornia = "imread_benchmark.decoders.kornia_decoder:KorniaDecoder"
+# Decoder registry. Adding a new decoder = adding one line here. The runtime
+# REGISTRY is built by iterating these entry points — no central import list,
+# no manual dict maintenance, plays well with out-of-tree decoder plugins.
+entry-points."imread_benchmark.decoders".opencv = "imread_benchmark.decoders.opencv_decoder:OpenCVDecoder"
+entry-points."imread_benchmark.decoders".pillow = "imread_benchmark.decoders.pillow_decoder:PillowDecoder"
+entry-points."imread_benchmark.decoders".pyvips = "imread_benchmark.decoders.pyvips_decoder:PyVipsDecoder"
+entry-points."imread_benchmark.decoders".simplejpeg = "imread_benchmark.decoders.simplejpeg_decoder:SimpleJpegDecoder"
+entry-points."imread_benchmark.decoders".skimage = "imread_benchmark.decoders.skimage_decoder:SkimageDecoder"
+entry-points."imread_benchmark.decoders".tensorflow = "imread_benchmark.decoders.tensorflow_decoder:TensorFlowDecoder"
+entry-points."imread_benchmark.decoders".torchvision = "imread_benchmark.decoders.torchvision_decoder:TorchvisionDecoder"
+entry-points."imread_benchmark.decoders".turbojpeg = "imread_benchmark.decoders.turbojpeg_decoder:TurboJPEGDecoder"
+
+[dependency-groups]
+dev = [
   "pillow",
   "pre-commit>=3.5",
   "pytest>=8",
@@ -29,10 +75,13 @@ optional-dependencies.dev = [
 build.targets.wheel.packages = [ "imread_benchmark" ]
 
 [tool.uv]
-dev-dependencies = [
-  "pillow",
-  "pre-commit>=3.5.0",
-  "pytest>=8.0",
+sources.torch = { index = "pytorch-cpu" }
+sources.torchvision = { index = "pytorch-cpu" }
+index = [
+  # CPU-only PyTorch wheels — avoids ~3 GB of CUDA libs we never use.
+  # `explicit = true` means this index is only consulted for packages
+  # explicitly assigned in [tool.uv.sources] below.
+  { name = "pytorch-cpu", url = "https://download.pytorch.org/whl/cpu", explicit = true },
 ]
 
 [tool.ruff]
@@ -104,6 +153,16 @@ lint.ignore = [
   "TRY003",
 ]
 lint.explicit-preview-rules = true
+# CLI dispatch code: typer's idiomatic patterns (Option-as-default,
+# bool flags, subprocess calls into trusted worker modules) trip rules
+# that are otherwise useful elsewhere. Scope locally to this one file.
+lint.per-file-ignores."imread_benchmark/cli.py" = [
+  "B008",    # typer.Option(...) in defaults is the documented pattern
+  "FBT001",  # --skip-setup is a typer flag, must be a bool param
+  "PLR0913", # `run` collects every CLI flag; splitting hurts UX, not complexity
+  "S603",    # subprocess into our own worker scripts with controlled argv
+  "S607",    # we require `uv` on PATH; absolute path would defeat the install docs
+]
 lint.per-file-ignores."tests/**" = [ "ARG", "NPY002", "S101" ]
 lint.fixable = [ "ALL" ]
 lint.unfixable = []

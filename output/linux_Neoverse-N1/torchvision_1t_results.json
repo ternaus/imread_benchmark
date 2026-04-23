@@ -1,0 +1,53 @@
+{
+  "library": "torchvision",
+  "mode": "memory",
+  "run_tag": "1t",
+  "requested_threads": 1,
+  "effective_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:33:21 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-N1",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "torchvision": "0.26.0+cpu"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 440.05640650922277,
+    "images_per_second_std": 0.2571015945803752,
+    "images_per_second_p50": 440.0970680184487,
+    "images_per_second_p90": 440.34261516990205,
+    "images_per_second_p99": 440.4355284747239,
+    "us_per_image_mean": 2272.4367297400167,
+    "us_per_image_p50": 2272.2259989200393,
+    "us_per_image_p90": 2273.9217364960205,
+    "us_per_image_p99": 2274.048321769599,
+    "raw_times_s": [
+      113.61129994600196,
+      113.70311933999983,
+      113.58789267199973,
+      113.52133242499985,
+      113.68553805200281
+    ],
+    "raw_throughput_ips": [
+      440.0970680184487,
+      439.7416736693732,
+      440.1877596618656,
+      440.4458521752597,
+      439.8096790211668
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 50000,
+    "num_images_skipped": 0,
+    "skip_rate": 0.0,
+    "skip_indices": [],
+    "skip_examples": []
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

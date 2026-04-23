@@ -1,0 +1,57 @@
+{
+  "library": "jpeg4py",
+  "mode": "memory",
+  "run_tag": "1t",
+  "requested_threads": 1,
+  "effective_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:35:04 UTC 2026",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 9B14",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "jpeg4py": "0.1.4"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 636.2763153143356,
+    "images_per_second_std": 0.13414051651095607,
+    "images_per_second_p50": 636.2154541774977,
+    "images_per_second_p90": 636.4410854500637,
+    "images_per_second_p99": 636.4750981863112,
+    "us_per_image_mean": 1571.644300398006,
+    "us_per_image_p50": 1571.794575931521,
+    "us_per_image_p90": 1571.9697458829144,
+    "us_per_image_p99": 1572.0308011168167,
+    "raw_times_s": [
+      78.59182749000001,
+      78.58815700200012,
+      78.55563126599964,
+      78.56729390600003,
+      78.60030721399971
+    ],
+    "raw_throughput_ips": [
+      636.185740894775,
+      636.2154541774977,
+      636.4788773792276,
+      636.3843975563179,
+      636.1171065638601
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 49999,
+    "num_images_skipped": 1,
+    "skip_rate": 2e-05,
+    "skip_indices": [
+      19876
+    ],
+    "skip_examples": [
+      "idx=19876: JPEGRuntimeError: tjDecompress2() failed with error -1 and error string Unsupported color conversion request"
+    ]
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

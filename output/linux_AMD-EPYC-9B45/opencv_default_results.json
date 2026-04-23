@@ -1,0 +1,53 @@
+{
+  "library": "opencv",
+  "mode": "memory",
+  "run_tag": "default",
+  "requested_threads": 0,
+  "effective_threads": 16,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#12~24.04.1-Ubuntu SMP Fri Mar 27 23:35:04 UTC 2026",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 9B45",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "opencv": "4.13.0.92"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 838.282493658711,
+    "images_per_second_std": 2.1251548529759003,
+    "images_per_second_p50": 837.4325430908765,
+    "images_per_second_p90": 840.8466931205237,
+    "images_per_second_p99": 841.8287624680262,
+    "us_per_image_mean": 1192.9229389599968,
+    "us_per_image_p50": 1194.1260322999915,
+    "us_per_image_p90": 1195.7432557279972,
+    "us_per_image_p99": 1196.3389044847959,
+    "raw_times_s": [
+      59.38680407599986,
+      59.706301614999575,
+      59.73752538999997,
+      59.82025438399978,
+      59.579849275000015
+    ],
+    "raw_throughput_ips": [
+      841.9378812844153,
+      837.4325430908765,
+      836.9948315329776,
+      835.8373015105997,
+      839.2099108746862
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 50000,
+    "num_images_skipped": 0,
+    "skip_rate": 0.0,
+    "skip_indices": [],
+    "skip_examples": []
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}
