@@ -5,10 +5,10 @@ Reads numeric fields directly (no string parsing) and derives titles from
 each result's recorded `system_info`, so adding a new platform is zero-config.
 
 Run via the CLI:
-    imread-benchmark plot --input output --output _internal/plots
+    imread-benchmark plot --input output --output docs/assets/benchmarks
 
 Or directly (from the repo root):
-    python -m tools.create_plots --input output --output _internal/plots
+    python -m tools.create_plots --input output --output docs/assets/benchmarks
 """
 
 from __future__ import annotations
@@ -20,9 +20,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from tools._results import load_results
+from tools._results import LIBRARY_ORDER, load_dataloader_results, load_results, short_platform
 
-sns.set_theme(style="whitegrid", font="Arial")
+README_SINGLE_PLOT = "single_thread_overview.png"
+README_DATALOADER_PLOT = "dataloader_peak_overview.png"
+
+sns.set_theme(style="whitegrid", font="DejaVu Sans")
 sns.set_context("paper", font_scale=1.5)
 
 
@@ -35,7 +38,7 @@ def _title_for_platform(df_platform: pd.DataFrame) -> str:
 
 def plot_platform_performance(df: pd.DataFrame, platform: str, output_path: Path) -> None:
     plt.style.use("default")
-    sns.set_theme(style="whitegrid", font="Arial")
+    sns.set_theme(style="whitegrid", font="DejaVu Sans")
 
     # Single-thread snapshot only (avoids mixing 1-thread and N-thread bars).
     pdata = df[(df["platform"] == platform) & (df["num_threads"] == 1)].copy()
@@ -85,10 +88,93 @@ def plot_platform_performance(df: pd.DataFrame, platform: str, output_path: Path
     plt.close()
 
 
+def _platform_labels(df: pd.DataFrame) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for platform in sorted(df["platform"].unique()):
+        cpu = df[df["platform"] == platform]["cpu_brand"].iloc[0]
+        labels[platform] = short_platform(platform, cpu)
+    return labels
+
+
+def _ordered_libraries(df: pd.DataFrame) -> list[str]:
+    seen = set(df["library"].unique())
+    known = [lib for lib in LIBRARY_ORDER if lib in seen]
+    unknown = sorted(seen - set(known))
+    return [*known, *unknown]
+
+
+def _leaderboard_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, str]]:
+    labels = _platform_labels(df)
+    pivot = df.pivot_table(
+        index="library",
+        columns="platform",
+        values="images_per_second",
+        aggfunc="max",
+    )
+    pivot = pivot.reindex(index=_ordered_libraries(df), columns=labels.keys())
+    pivot = pivot.rename(columns=labels)
+    return pivot, labels
+
+
+def _annotate_values(values: pd.DataFrame, relative: pd.DataFrame) -> pd.DataFrame:
+    annotations = values.copy().astype("object")
+    for row in values.index:
+        for col in values.columns:
+            value = values.loc[row, col]
+            pct = relative.loc[row, col]
+            annotations.loc[row, col] = "" if pd.isna(value) else f"{value:,.0f}\n{pct:.0f}%"
+    return annotations
+
+
+def _plot_overview_heatmap(values: pd.DataFrame, title: str, output_path: Path) -> None:
+    relative = values.div(values.max(axis=0), axis=1) * 100
+    annotations = _annotate_values(values, relative)
+
+    height = max(5.0, 0.42 * len(values.index) + 1.8)
+    width = max(8.0, 1.45 * len(values.columns) + 3.2)
+    plt.figure(figsize=(width, height))
+    ax = sns.heatmap(
+        relative,
+        vmin=0,
+        vmax=100,
+        cmap="YlGnBu",
+        linewidths=0.5,
+        linecolor="white",
+        annot=annotations,
+        fmt="",
+        cbar_kws={"label": "% of fastest on that platform"},
+    )
+    ax.set_title(title, pad=18, fontsize=16, fontweight="bold")
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.tick_params(axis="x", rotation=25)
+    ax.tick_params(axis="y", rotation=0)
+    plt.tight_layout(pad=1.2)
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
+def plot_single_thread_overview(df: pd.DataFrame, output_path: Path) -> None:
+    single = df[df["run_tag"] == "1t"].copy()
+    if single.empty:
+        return
+    values, _ = _leaderboard_matrix(single)
+    _plot_overview_heatmap(values, "Single-thread JPEG decode throughput", output_path)
+
+
+def plot_dataloader_overview(df: pd.DataFrame, output_path: Path) -> None:
+    if df.empty:
+        return
+    peak_idx = df.groupby(["platform", "library"])["images_per_second"].idxmax()
+    peaks = df.loc[peak_idx].copy()
+    values, _ = _leaderboard_matrix(peaks)
+    _plot_overview_heatmap(values, "Peak PyTorch DataLoader throughput", output_path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Plot imread-benchmark single-thread results.")
     parser.add_argument("--input", type=Path, default=Path("output"))
-    parser.add_argument("--output", type=Path, default=Path("_internal/plots"))
+    parser.add_argument("--output", type=Path, default=Path("docs/assets/benchmarks"))
     args = parser.parse_args()
 
     df = load_results(args.input)
@@ -97,6 +183,15 @@ def main() -> None:
         return
 
     args.output.mkdir(parents=True, exist_ok=True)
+    single_overview = args.output / README_SINGLE_PLOT
+    plot_single_thread_overview(df, single_overview)
+    print(f"wrote {single_overview}")
+
+    ddf = load_dataloader_results(args.input)
+    dataloader_overview = args.output / README_DATALOADER_PLOT
+    plot_dataloader_overview(ddf, dataloader_overview)
+    print(f"wrote {dataloader_overview}")
+
     for platform in sorted(df["platform"].unique()):
         out_file = args.output / f"performance_{platform}.png"
         plot_platform_performance(df, platform, out_file)
