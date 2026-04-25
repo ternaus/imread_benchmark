@@ -11,7 +11,7 @@ Usage:
     imread-benchmark list-libs
     imread-benchmark run --data-dir ~/imagenet/val
     imread-benchmark run --data-dir DATA --mode single --libs opencv,pillow
-    imread-benchmark plot --input output --output _internal/plots
+    imread-benchmark plot --input output --output docs/assets/benchmarks
 """
 
 from __future__ import annotations
@@ -377,7 +377,7 @@ def run(
 @app.command("plot")
 def plot(
     input_dir: Path = typer.Option(Path("output"), "--input", "-i", exists=True),
-    output_dir: Path = typer.Option(Path("_internal/plots"), "--output", "-o"),
+    output_dir: Path = typer.Option(Path("docs/assets/benchmarks"), "--output", "-o"),
 ) -> None:
     """Generate paper-quality plots from output/ JSONs. Wraps tools/create_plots.py."""
     import importlib.util

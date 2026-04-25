@@ -12,7 +12,7 @@ uv sync --group dev
 The `_internal/` directory is **gitignored**. Keep drafts, papers, regenerated plots, PDFs, and scratch assets there — for example:
 
 - `_internal/papers/paper.md` — arXiv / manuscript drafts (do not add `paper.md` at repo root)
-- `_internal/plots/` — figures from `tools/create_plots.py` (default output directory)
+- `_internal/plots/` — scratch figures from `tools/create_plots.py` (README plots live in `docs/assets/benchmarks/`)
 - `_internal/assets/` — sample images, posters, one-off binaries
 - `_internal/notebooks/` — local Jupyter notebooks (the repo ignores `*.ipynb`; do not commit them)
 

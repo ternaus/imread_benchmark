@@ -6,11 +6,18 @@ Benchmarks the speed of reading JPEG images and converting them to RGB numpy arr
 
 ## Results
 
-The two tables below are auto-generated from `output/<platform>/*.json` by [tools/render_readme.py](tools/render_readme.py). To refresh after a new run:
+The plots and tables below are generated from `output/<platform>/*.json`. To refresh after a new run:
 
 ```bash
+imread-benchmark plot --input output --output docs/assets/benchmarks
 imread-benchmark render-readme
 ```
+
+The plot labels show `img/s` and `% of the fastest decoder on that CPU`, so darker cells are the winners for that platform.
+
+![Single-thread JPEG decode throughput](docs/assets/benchmarks/single_thread_overview.png)
+
+![Peak PyTorch DataLoader throughput](docs/assets/benchmarks/dataloader_peak_overview.png)
 
 ### Single-thread decode throughput (img/s)
 
@@ -129,8 +136,8 @@ imread-benchmark run --data-dir /path/to/imagenet/val \
 imread-benchmark run --data-dir /path/to/imagenet/val \
     --libs opencv --mode single
 
-# Generate plots from output/ JSONs
-imread-benchmark plot --input output --output _internal/plots
+# Generate README plots from output/ JSONs
+imread-benchmark plot --input output --output docs/assets/benchmarks
 ```
 
 The CLI sets up `venvs/<group>/` for each dependency group it needs. Subsequent runs reuse those venvs, so only the first invocation pays the install cost.
