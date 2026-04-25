@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 # Bound on retained error strings — enough to triage in the JSON without
 # bloating the file when a decoder rejects a large slice of the dataset.
+_WRAPPER_BUG_EXCEPTIONS = (TypeError, AttributeError, ImportError, ModuleNotFoundError)
 MAX_SKIP_EXAMPLES = 3
 
 # If a decoder fails on every single item it's not "decoder X has a 100% skip
@@ -23,6 +24,15 @@ _ALL_FAILED_TEMPLATE = (
     "First error: {err}. This is treated as a decoder failure, not a skip rate."
 )
 
+def _validate_output(result: Any) -> None:
+    if not isinstance(result, np.ndarray):
+        raise ValueError(f"expected numpy.ndarray, got {type(result).__name__}")
+    if result.ndim != 3:
+        raise ValueError(f"expected 3-D (H, W, 3) array, got shape {result.shape}")
+    if result.shape[2] != 3:
+        raise ValueError(f"expected 3 channels in shape[2], got shape {result.shape}")
+    if result.dtype != np.uint8:
+        raise ValueError(f"expected uint8 dtype, got {result.dtype}")
 
 def _summarise(times_per_run_s: list[float], n_items: int) -> dict[str, Any]:
     """
@@ -41,7 +51,7 @@ def _summarise(times_per_run_s: list[float], n_items: int) -> dict[str, Any]:
 
     return {
         "images_per_second_mean": float(ips_arr.mean()),
-        "images_per_second_std": float(ips_arr.std()),
+        "images_per_second_std": float(ips_arr.std(ddof=1)) if ips_arr.size > 1 else 0.0,
         "images_per_second_p50": float(np.percentile(ips_arr, 50)),
         "images_per_second_p90": float(np.percentile(ips_arr, 90)),
         "images_per_second_p99": float(np.percentile(ips_arr, 99)),
@@ -74,12 +84,15 @@ def _discover_skips(
     examples: list[str] = []
     for idx, item in enumerate(items):
         try:
-            decode_fn(item)
+            result = decode_fn(item)
+            _validate_output(result)
         # Decoder libs raise everything from OSError to ValueError to custom
         # exception types (jpeg4py.JPEGRuntimeError). We genuinely want to
         # catch them all — anything that prevents successful decode of one
         # item is a "skip", regardless of how the library chose to express it.
         except Exception as exc:
+            if isinstance(exc, _WRAPPER_BUG_EXCEPTIONS):
+                raise
             skipped.append(idx)
             if len(examples) < MAX_SKIP_EXAMPLES:
                 examples.append(f"idx={idx}: {type(exc).__name__}: {exc}")
