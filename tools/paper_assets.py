@@ -13,7 +13,6 @@ Usage (from repo root, with plot extras):
 from __future__ import annotations
 
 import argparse
-import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -100,15 +99,15 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> str:
 
 
 def _fmt_mean_std(mean: float | None, std: float | None) -> str:
-    if mean is None or (isinstance(mean, float) and math.isnan(mean)):
+    if pd.isna(mean):
         return "—"
-    if std is None or (isinstance(std, float) and math.isnan(std)):
+    if pd.isna(std):
         return f"{mean:.0f}"
     return f"{mean:.0f} ± {std:.0f}"
 
 
 def _fmt_ips(v: float | None) -> str:
-    if v is None or (isinstance(v, float) and math.isnan(v)):
+    if pd.isna(v):
         return "—"
     return f"{v:.0f}"
 
@@ -386,6 +385,8 @@ def _peak_pct_of_platform_winner(dl: pd.DataFrame) -> pd.DataFrame:
         if sub.empty:
             continue
         winner_ips = float(sub["peak_ips"].max())
+        if pd.isna(winner_ips) or winner_ips <= 0:
+            continue
         rows.extend(
             [
                 {
