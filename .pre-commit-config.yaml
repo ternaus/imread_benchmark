@@ -44,14 +44,14 @@ repos:
       - id: requirements-txt-fixer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.10
+    rev: v0.15.12
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.7
+    rev: 0.11.8
     hooks:
       - id: uv-lock
 
@@ -76,7 +76,7 @@ repos:
       - id: pyproject-fmt
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.20.1
+    rev: v1.20.2
     hooks:
       - id: mypy
         files: ^imread_benchmark/

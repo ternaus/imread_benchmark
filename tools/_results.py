@@ -94,6 +94,8 @@ def load_results(input_dir: Path) -> pd.DataFrame:
                     "p90": results.get("images_per_second_p90"),
                     "p99": results.get("images_per_second_p99"),
                     "us_per_image": results.get("us_per_image_mean"),
+                    "skip_rate": results.get("skip_rate"),
+                    "num_images_skipped": results.get("num_images_skipped"),
                     "cpu_brand": cpu.get("brand_raw", "Unknown CPU"),
                     "os_name": sysinfo.get("OS", platform.split("_")[0].title()),
                 },
