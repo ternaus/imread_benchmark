@@ -143,7 +143,7 @@ def generate_hardware_table(df_1t: pd.DataFrame, dest: Path) -> None:
 
 def generate_single_thread_table(df_1t: pd.DataFrame, dest: Path) -> None:
     df = _paper_scope(df_1t)
-    df = df[df["num_threads"] == 1]
+    df = df[df["run_tag"] == "1t"]
 
     libs = _ordered_libs_present(df)
     plat_labels = _platform_labels(_cpu_by_platform(df))
@@ -158,8 +158,8 @@ def generate_single_thread_table(df_1t: pd.DataFrame, dest: Path) -> None:
             else:
                 row.append(
                     _fmt_mean_std(
-                        float(sub["images_per_second"].iloc[0]),
-                        float(sub["std_dev"].iloc[0]) if pd.notna(sub["std_dev"].iloc[0]) else None,
+                        sub["images_per_second"].iloc[0],
+                        sub["std_dev"].iloc[0],
                     ),
                 )
         rows.append(row)
@@ -171,6 +171,7 @@ def generate_single_thread_table(df_1t: pd.DataFrame, dest: Path) -> None:
 
 
 def _peak_dataloader_rows(dl: pd.DataFrame) -> pd.DataFrame:
+    dl = dl[dl["num_workers"].isin(WORKERS_ORDER)]
     rows: list[dict] = []
     for plat in PAPER_PLATFORMS:
         libs = dl[dl["platform"] == plat]["library"].unique()
