@@ -1,8 +1,16 @@
-# Image Loading Benchmark
+# imread-benchmark
 
 ## Overview
 
-Benchmarks the speed of reading JPEG images and converting them to RGB numpy arrays across popular Python libraries. Targets machine learning training pipelines, measured across multiple CPU architectures (Intel Xeon, AMD EPYC, ARM Neoverse, Apple M-series) using the ImageNet validation set.
+`imread-benchmark` is a reproducible benchmark framework for JPEG decoding in Python ML pipelines. It provides:
+
+- an installable `imread-benchmark` CLI for local datasets,
+- isolated per-library worker environments so conflicting stacks can be benchmarked in one run,
+- PyTorch `DataLoader` throughput measurements in addition to single-thread decoder speed,
+- Google Cloud runners for repeatable cloud CPU comparisons, and
+- JSON outputs plus generated plots/tables for README, docs, and publication-ready analysis.
+
+The default benchmark uses the ImageNet validation set and reports RGB `uint8` decode throughput across common Python libraries and CPU families.
 
 ## Results
 
@@ -69,6 +77,18 @@ _**5 platforms** · 50,000 images · 5 runs each · latest run 2026-04-22_
 
 <!-- BENCH:metadata:end -->
 
+### What the results mean
+
+Single-thread decoder speed is useful, but it is not enough to choose a decoder for a training pipeline. The peak `DataLoader` table is usually the better operational signal because it captures multiprocessing worker behavior, library fork-safety, and CPU-specific scaling.
+
+Current headline patterns:
+
+- `simplejpeg` is a strong single-thread baseline and wins peak `DataLoader` throughput on Intel Emerald Rapids and Neoverse N1.
+- `torchvision` wins both AMD platforms at peak `DataLoader` throughput and is effectively tied for first on Neoverse V2.
+- `imageio` is not a single-thread leader, but wins peak `DataLoader` throughput on Neoverse V2 in the current GCP runs.
+- OpenCV is rarely the absolute winner, but is consistently close to the local winner and has successful `DataLoader` results on every platform.
+- PyVips is reported for single-thread decode only; it is skipped in fork-based `DataLoader` benchmarks because of libvips threadpool deadlocks in this harness.
+
 ## GitAds Sponsored
 
 [Sponsored by GitAds](https://gitads.dev/v1/ad-track?source=ternaus/imread_benchmark@github)
@@ -94,10 +114,11 @@ mkdir -p imagenet/val
 tar -xf ILSVRC2012_img_val.tar -C imagenet/val
 ```
 
-## System Requirements (macOS)
+## System Requirements
 
 ```bash
-brew install jpeg-turbo   # required by PyTurboJPEG (pure-python ctypes binding)
+# macOS only: required by PyTurboJPEG (pure-python ctypes binding)
+brew install jpeg-turbo
 ```
 
 `pyvips` ships its own bundled libvips via the `pyvips-binary` PyPI wheel,
@@ -159,10 +180,11 @@ Built venvs are cached in GCS (keyed by `sha256(uv.lock)`), so reruns on the sam
 
 ```
 output/
-└── darwin_Apple-M4-Max/
-    ├── opencv_results.json
-    ├── pillow_results.json
+└── linux_AMD-EPYC-9B45/
+    ├── opencv_1t_results.json
+    ├── opencv_default_results.json
     ├── opencv_dataloader_results.json
+    ├── run_summary.json
     └── ...
 ```
 
@@ -208,18 +230,38 @@ output/
 
 ## Recommendations
 
-### High-throughput ML training
+### Choosing for ML training
 
-- Use `simplejpeg`, `turbojpeg`, or `kornia-rs` for maximum single-thread decode speed
-- Use the DataLoader benchmark to find the best `num_workers` for your CPU
+- Use the DataLoader benchmark for final decoder and `num_workers` selection.
+- Start with OpenCV when you need a robust default that runs everywhere.
+- Try `torchvision` when your pipeline already wants tensors and you can benchmark the target CPU.
+- Try `simplejpeg` / `turbojpeg` / `jpeg4py` when maximum libjpeg-turbo-backed speed matters and your dataset policy handles uncommon JPEG modes.
 
-### Cross-platform
+### Choosing for pure decode speed
 
-- `kornia-rs` and `opencv` offer the most consistent cross-platform performance
+- Use the single-thread table to compare isolated decoder implementations.
+- Re-run locally if your images differ substantially from ImageNet validation JPEGs.
 
-### Feature-rich applications
+### Choosing for feature-rich applications
 
 - `opencv` remains the best choice when you need more than just JPEG decoding
+
+## Paper and Publication Assets
+
+The public README plots are generated under `docs/assets/benchmarks/`:
+
+```bash
+imread-benchmark plot --input output --output docs/assets/benchmarks
+imread-benchmark render-readme
+```
+
+Publication-style tables and figures are generated from the same JSON outputs into ignored local files under `_internal/papers/`:
+
+```bash
+uv run --extra plot python -m tools.paper_assets --all
+```
+
+`_internal/` is intentionally gitignored. Commit the source JSON and public README assets, not local manuscript drafts or generated paper PDFs.
 
 ## Development
 

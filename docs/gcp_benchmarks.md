@@ -1,9 +1,13 @@
 # Running Benchmarks on Google Cloud
 
-The scripts in `gcp/` spin up a Linux x86-64 VM on GCP, run all benchmarks against
-ImageNet from a GCS bucket, upload results back to GCS, and **delete the VM when done**.
-No machine time is wasted. You can start a run, close your laptop, and fetch results
-in the morning.
+The scripts in `gcp/` are the cloud replication framework for `imread-benchmark`.
+They spin up a GCP VM, run the same local `imread-benchmark` CLI against ImageNet
+from a GCS bucket, upload JSON results and logs back to GCS, and **delete the VM
+when done**. No machine time is wasted. You can start a run, close your laptop,
+and fetch results in the morning.
+
+Use this path when you want reproducible CPU comparisons across GCP machine
+families, not just a one-off local benchmark.
 
 ---
 
@@ -262,10 +266,31 @@ Already in the decoder registry. `imread-benchmark run` honors the per-decoder
 platform-skip metadata, so it automatically participates when you launch on a
 matching VM (Linux for jpeg4py).
 
+## Regenerating public and paper assets
+
+After fetching `output/` from GCS, regenerate public README assets with:
+
+```bash
+imread-benchmark plot --input output --output docs/assets/benchmarks
+imread-benchmark render-readme
+```
+
+Publication-style tables and figures use the same JSON outputs but write into the
+ignored `_internal/papers/` workspace:
+
+```bash
+uv run --extra plot python -m tools.paper_assets --all
+```
+
+Do not commit `_internal/` outputs. They are local manuscript artifacts; the
+tracked source of truth is the benchmark JSON plus the generator code.
+
+---
+
 ## Sample size
 
 The defaults (`N=50000`, `--num-runs 5`, `--dl-runs 3`, `--workers "0 2 4 8"`)
-are picked to give paper-grade precision in the smallest wallclock the
+are picked to give publication-grade precision in the smallest wallclock the
 statistics actually justify. Earlier revisions used 50000 × 20 single-thread
 runs and 50000 × 5 dataloader runs across `0 1 2 4 8` workers — that was ~4×
 slower than necessary for zero gain in any number we cite.
@@ -274,10 +299,10 @@ slower than necessary for zero gain in any number we cite.
 
 Full ImageNet val. Two reasons:
 
-1. **No sampling defense in the paper.** "We use the standard ImageNet val
+1. **No sampling defense in a report.** "We use the standard ImageNet val
    set (N = 50 000)" needs no justification. "We sampled 10 000 images" needs
-   a paragraph on selection method, seed, representativeness, and a reviewer
-   asking why N is below the natural unit.
+   a paragraph on selection method, seed, representativeness, and why N is
+   below the natural unit.
 2. **Doesn't drive wallclock anyway.** Per-run time is `N / throughput`. The
    slow decoders (skimage, imageio at ~200 img/s) take ~4 min/run at N=50k;
    cutting N to 10k saves ~3 min/run, but that's the entire decoder's runtime
@@ -293,7 +318,7 @@ error on the *mean throughput* across `N × num_runs` decodes is:
 
 For 50000 × 5 that's ~0.08% relative SE. The interesting effect sizes we
 compare are 2× to 100× (decoder throughput differences). Even 1% SE is more
-precision than the paper can use; 0.08% is theatrical.
+precision than the benchmark decision can use; 0.08% is theatrical.
 
 `num_runs` matters for *per-run percentiles* (p50/p90/p99 across runs), not
 for mean precision. With `num_runs = 5`:
@@ -301,7 +326,7 @@ for mean precision. With `num_runs = 5`:
 - `p50` = median of 5 ≈ stable
 - `p90`, `p99` = essentially the max-of-5, no useful resolution
 
-We dropped these columns from the paper. The headline is `mean ± std img/s`,
+We dropped these columns from publication tables. The headline is `mean ± std img/s`,
 and `num_runs = 5` gives a stable std estimate (5 samples is the practical
 minimum for a non-degenerate sample variance).
 

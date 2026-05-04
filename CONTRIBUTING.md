@@ -19,6 +19,22 @@ The `_internal/` directory is **gitignored**. Keep drafts, papers, regenerated p
 
 Nothing under `_internal/` is tracked by git.
 
+## Preparing an anonymous review mirror
+
+The public repository intentionally keeps public identity links. If you need a
+double-blind review artifact, create a separate branch or mirror and remove
+identity surfaces there, not in regular public cleanup PRs.
+
+Checklist for that later anonymous branch:
+
+- remove the GitAds block from `README.md`
+- remove or replace `.github/FUNDING.yml`
+- replace the public citation block in `README.md` with an anonymous artifact note
+- remove direct links to public GitHub profiles, public repository URLs, and author names
+- replace personal or project-specific GCS examples with neutral placeholders if needed
+- verify with `rg -i 'ternaus|iglovikov|vladimir|gitads|github sponsors|2501.13131'`
+- keep `_internal/` ignored; do not publish manuscript drafts by accident
+
 ## Running tests
 
 ```bash
@@ -61,18 +77,18 @@ class FooDecoder(BaseDecoder):
 
 The default `decode_path()` implementation calls `decode(Path(path).read_bytes())`, which is correct for all libraries.
 
-### 2. Register in the registry
+### 2. Register the decoder entry point
 
-In [`imread_benchmark/decoders/__init__.py`](imread_benchmark/decoders/__init__.py):
+In [`pyproject.toml`](pyproject.toml), add an entry under
+`[project.entry-points."imread_benchmark.decoders"]`:
 
-```python
-from imread_benchmark.decoders.foo_decoder import FooDecoder  # add
-
-REGISTRY = {
-    ...
-    "foo": FooDecoder,  # add
-}
+```toml
+entry-points."imread_benchmark.decoders".foo = "imread_benchmark.decoders.foo_decoder:FooDecoder"
 ```
+
+The runtime `REGISTRY` is built from these entry points. Do not hand-edit
+`imread_benchmark/decoders/__init__.py` unless you are changing the registry
+mechanism itself.
 
 ### 3. Add to a dependency group
 
@@ -92,7 +108,7 @@ mainstream = [
 ]
 ```
 
-Add a platform marker if the wheel doesn't build everywhere.
+Add a platform marker if the wheel does not build everywhere.
 
 ### 4. Encode platform skips on the class
 
@@ -143,7 +159,9 @@ tests/
 └── test_utils.py            # utility function tests
 tools/
 ├── analyze_images.py        # dataset statistics
-└── create_plots.py          # generate performance charts
+├── create_plots.py          # generate public README performance charts
+├── paper_assets.py          # generate local paper tables/figures under _internal/
+└── render_readme.py         # refresh benchmark tables in README.md
 pyproject.toml               # 2 dependency groups under [project.optional-dependencies]:
                              #   mainstream / tensorflow
 ```
