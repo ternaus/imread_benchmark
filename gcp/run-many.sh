@@ -8,7 +8,7 @@
 #      VM keeps running in the cloud, finishes, self-deletes — but the
 #      local script is dead and the next iteration of a wrapper for-loop
 #      would launch a new VM possibly while the old one's quota is still
-#      held. With a 32 vCPU project quota that's a real wedge.
+#      held. With a 64 vCPU project quota that's still a real wedge.
 #   2. GCP zonal stockouts (ZONE_RESOURCE_POOL_EXHAUSTED) happen randomly
 #      for c4-* / c4d-* / c4a-* — the modern families on hyperdisk-balanced
 #      live in a smaller capacity pool than c3 / n2d. We retry across zones

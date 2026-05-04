@@ -61,9 +61,9 @@ def load_results(input_dir: Path) -> pd.DataFrame:
     Single-thread / fixed-thread results only — dataloader files are skipped
     here and handled by load_dataloader_results().
 
-    Columns: platform, library, num_threads, num_images, num_runs,
+    Columns: platform, library, run_tag, num_threads, num_images, num_runs,
              images_per_second, std_dev, p50, p90, p99, us_per_image,
-             cpu_brand, os_name.
+             skip_rate, num_images_skipped, cpu_brand, os_name.
     """
     rows: list[dict] = []
     for platform_dir in sorted(p for p in input_dir.iterdir() if p.is_dir()):
@@ -94,6 +94,8 @@ def load_results(input_dir: Path) -> pd.DataFrame:
                     "p90": results.get("images_per_second_p90"),
                     "p99": results.get("images_per_second_p99"),
                     "us_per_image": results.get("us_per_image_mean"),
+                    "skip_rate": results.get("skip_rate"),
+                    "num_images_skipped": results.get("num_images_skipped"),
                     "cpu_brand": cpu.get("brand_raw", "Unknown CPU"),
                     "os_name": sysinfo.get("OS", platform.split("_")[0].title()),
                 },
