@@ -35,12 +35,15 @@ def _require_plotting() -> tuple[ModuleType, ModuleType, type]:
     if plt is not None and sns is not None and Patch is not None:
         return plt, sns, Patch
     try:
+        import matplotlib as mpl
         import matplotlib.pyplot as plt
         import seaborn as sns
         from matplotlib.patches import Patch
     except ImportError as exc:
         msg = "Figure generation requires matplotlib and seaborn. Install with `uv sync --extra plot`."
         raise RuntimeError(msg) from exc
+    mpl.rcParams["pdf.fonttype"] = 42
+    mpl.rcParams["ps.fonttype"] = 42
     return plt, sns, Patch
 
 
@@ -152,6 +155,22 @@ def _fmt_ips(v: float | None) -> str:
     if pd.isna(v):
         return "—"
     return f"{v:.0f}"
+
+
+def _latex_escape(s: str) -> str:
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+    return "".join(replacements.get(ch, ch) for ch in s)
 
 
 def _validate_platform_set(label: str, actual: set[str]) -> None:
@@ -400,6 +419,83 @@ def generate_recommendation_table(dl: pd.DataFrame, dest: Path) -> None:
     )
     dest.write_text(
         "# Table 6 — Operational DataLoader recommendation summary\n\n" + note + "\n" + _md_table(headers, rows),
+        encoding="utf-8",
+    )
+
+
+def _format_platform_choice(row: pd.Series) -> str:
+    lib = _latex_escape(str(row["library"]))
+    ips = float(row["peak_ips"])
+    workers = int(row["peak_workers"])
+    return rf"\texttt{{{lib}}}: {ips:.0f} img/s ($w={workers}$)"
+
+
+def _platform_recommendation_rows(dl: pd.DataFrame) -> list[list[str]]:
+    dl = _paper_scope(dl)
+    peak = _peak_dataloader_rows(dl)
+    plat_labels = _platform_labels(_cpu_by_platform(dl))
+    zero_skip_loader_decoders = EXPECTED_DATALOADER_DECODERS - EXPECTED_SKIP_DECODERS
+
+    rows: list[list[str]] = []
+    for plat in PAPER_PLATFORMS:
+        sub = peak[(peak["platform"] == plat) & (peak["library"].isin(zero_skip_loader_decoders))]
+        sub = sub.sort_values(["peak_ips", "library"], ascending=[False, True])
+        if len(sub) < 3:
+            raise ValueError(f"{plat} has fewer than three zero-skip DataLoader choices")
+        choices = [_format_platform_choice(sub.iloc[i]) for i in range(3)]
+        rows.append(
+            [
+                _latex_escape(plat_labels[plat]),
+                *choices,
+                rf"GCP \texttt{{{_latex_escape(PLATFORM_MACHINE[plat])}}}",
+            ],
+        )
+    return rows
+
+
+def generate_platform_recommendation_table(dl: pd.DataFrame, dest: Path) -> None:
+    headers = [
+        "Platform",
+        "First zero-skip choice",
+        "Second zero-skip choice",
+        "Third zero-skip choice",
+        "Note",
+    ]
+    rows = _platform_recommendation_rows(dl)
+    body = "\n".join("    " + " & ".join(row) + r" \\" for row in rows)
+    header = " & ".join(headers)
+    caption = (
+        r"  \caption{Per-platform zero-skip DataLoader starting points. Values are measured peak PyTorch "
+        r"\texttt{DataLoader} throughput on the paper matrix; use them as initial guidance, not as a "
+        r"universal recommendation.}"
+    )
+    note = (
+        r"  {\footnotesize Strict libjpeg-turbo-family wrappers may be fast but skipped one ImageNet JPEG; "
+        r"PyVips and TensorFlow are not PyTorch \texttt{DataLoader} choices in this harness.\par}"
+    )
+    dest.write_text(
+        "\n".join(
+            [
+                r"\begin{table}[ht]",
+                r"  \centering",
+                r"  \scriptsize",
+                r"  \setlength{\tabcolsep}{2pt}",
+                r"  \renewcommand{\arraystretch}{1.08}",
+                caption,
+                r"  \label{tab:platform-starting-points}",
+                r"  \begin{tabularx}{\linewidth}{@{}YYYYY@{}}",
+                r"    \toprule",
+                f"    {header} " + r"\\",
+                r"    \midrule",
+                body,
+                r"    \bottomrule",
+                r"  \end{tabularx}",
+                r"  \vspace{2pt}",
+                note,
+                r"\end{table}",
+                "",
+            ],
+        ),
         encoding="utf-8",
     )
 
@@ -779,6 +875,7 @@ def generate_tables(input_dir: Path, paper_dir: Path) -> None:
     generate_amd_w4_w8_table(dl, gen / "table04_amd_w4_w8.md")
     generate_robustness_table(input_dir, df_1t, gen / "table05_robustness.md")
     generate_recommendation_table(dl, gen / "table06_recommendation_tier.md")
+    generate_platform_recommendation_table(dl, gen / "table07_platform_recommendations.tex")
     (gen / "README.md").write_text(
         "# Generated paper tables\n\n"
         "- `table01_hardware.md`\n"
@@ -786,7 +883,8 @@ def generate_tables(input_dir: Path, paper_dir: Path) -> None:
         "- `table03_peak_dataloader.md`\n"
         "- `table04_amd_w4_w8.md`\n"
         "- `table05_robustness.md`\n"
-        "- `table06_recommendation_tier.md`\n\n"
+        "- `table06_recommendation_tier.md`\n"
+        "- `table07_platform_recommendations.tex`\n\n"
         "Regenerate from repo root:\n\n"
         "```bash\n"
         "uv run --extra plot python -m tools.paper_assets --tables\n"
