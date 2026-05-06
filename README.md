@@ -136,11 +136,24 @@ On Linux you'll still need `apt install libjpeg-turbo8-dev libturbojpeg0`
 # Install uv if needed
 pip install uv
 
-# Install the orchestrator (control-plane) into a venv.
-# Per-library worker venvs (mainstream / tensorflow) are created lazily on
-# first run, with the right libjpeg-turbo / libvips deps.
+# Install the lightweight orchestrator (control plane).
 uv venv && source .venv/bin/activate
 uv pip install -e .
+```
+
+The benchmark CLI creates decoder worker environments automatically under
+`venvs/<group>/` when `imread-benchmark run` needs them. Today the groups are
+`mainstream` and `tensorflow`; they are separate because TensorFlow and
+PyTorch-oriented packages can have incompatible NumPy/protobuf constraints.
+The first full run pays the dependency installation cost, and later runs reuse
+the populated worker environments. Use `--skip-setup` only when those worker
+environments already exist and should not be modified.
+
+Plotting is separate from benchmark execution. Install the plotting extra only
+if you want to regenerate figures:
+
+```bash
+uv pip install -e '.[plot]'
 ```
 
 ## Running the Benchmark
