@@ -21,6 +21,14 @@ import pandas as pd
 import seaborn as sns
 
 from tools._results import LIBRARY_ORDER, load_dataloader_results, load_results, short_platform
+from tools.paper_assets import (
+    CLAIM_FIGURE_BASENAMES,
+    plot_fig01_protocol_rank_change,
+    plot_fig02_amd_worker_delta,
+    plot_fig03_tensorflow_arm_penalty,
+    plot_fig04_cross_platform_recommendation,
+    validate_paper_data,
+)
 
 README_SINGLE_PLOT = "single_thread_overview.png"
 README_DATALOADER_PLOT = "dataloader_peak_overview.png"
@@ -171,6 +179,24 @@ def plot_dataloader_overview(df: pd.DataFrame, output_path: Path) -> None:
     _plot_overview_heatmap(values, "Peak PyTorch DataLoader throughput", output_path)
 
 
+def plot_claim_first_readme_figures(single: pd.DataFrame, dl: pd.DataFrame, output_dir: Path) -> bool:
+    """Write the paper/README claim-first figure set when the full paper matrix is present."""
+    try:
+        validate_paper_data(single, dl)
+    except ValueError as exc:
+        print(f"paper claim-first figures skipped: {exc}")
+        return False
+
+    sns.set_theme(style="whitegrid", context="paper", font="DejaVu Sans", font_scale=1.1)
+    plot_fig01_protocol_rank_change(single, dl, output_dir, ("png",))
+    plot_fig02_amd_worker_delta(dl, output_dir, ("png",))
+    plot_fig03_tensorflow_arm_penalty(single, output_dir, ("png",))
+    plot_fig04_cross_platform_recommendation(dl, output_dir, ("png",))
+    for basename in CLAIM_FIGURE_BASENAMES:
+        print(f"wrote {output_dir / (basename + '.png')}")
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Plot imread-benchmark single-thread results.")
     parser.add_argument("--input", type=Path, default=Path("output"))
@@ -183,19 +209,22 @@ def main() -> None:
         return
 
     args.output.mkdir(parents=True, exist_ok=True)
-    single_overview = args.output / README_SINGLE_PLOT
-    plot_single_thread_overview(df, single_overview)
-    print(f"wrote {single_overview}")
 
     ddf = load_dataloader_results(args.input)
-    dataloader_overview = args.output / README_DATALOADER_PLOT
-    plot_dataloader_overview(ddf, dataloader_overview)
-    print(f"wrote {dataloader_overview}")
+    wrote_claim_figures = plot_claim_first_readme_figures(df, ddf, args.output)
+    if not wrote_claim_figures:
+        single_overview = args.output / README_SINGLE_PLOT
+        plot_single_thread_overview(df, single_overview)
+        print(f"wrote {single_overview}")
 
-    for platform in sorted(df["platform"].unique()):
-        out_file = args.output / f"performance_{platform}.png"
-        plot_platform_performance(df, platform, out_file)
-        print(f"wrote {out_file}")
+        dataloader_overview = args.output / README_DATALOADER_PLOT
+        plot_dataloader_overview(ddf, dataloader_overview)
+        print(f"wrote {dataloader_overview}")
+
+        for platform in sorted(df["platform"].unique()):
+            out_file = args.output / f"performance_{platform}.png"
+            plot_platform_performance(df, platform, out_file)
+            print(f"wrote {out_file}")
 
 
 if __name__ == "__main__":

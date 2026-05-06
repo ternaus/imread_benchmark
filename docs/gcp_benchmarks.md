@@ -295,6 +295,13 @@ statistics actually justify. Earlier revisions used 50000 × 20 single-thread
 runs and 50000 × 5 dataloader runs across `0 1 2 4 8` workers — that was ~4×
 slower than necessary for zero gain in any number we cite.
 
+For paper figures and wording, see
+[`docs/plotting_and_statistics.md`](plotting_and_statistics.md). In short:
+tables report `mean ± sample std`, but comparative claims should use the raw
+`raw_throughput_ips` samples plus practical thresholds. Treat DataLoader gaps
+below about 5% as top-tier ties unless raw-run uncertainty clearly separates
+them.
+
 ### Why N = 50000
 
 Full ImageNet val. Two reasons:

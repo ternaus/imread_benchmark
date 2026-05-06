@@ -14,6 +14,11 @@ The `_internal/` directory is **gitignored**. Keep drafts, papers, regenerated p
 - `_internal/papers/paper.md` — arXiv / manuscript drafts (do not add `paper.md` at repo root)
 - `_internal/papers/generate_paper_assets.py` — thin wrapper; calls `python -m tools.paper_assets --all` to write `generated/*.md` + `figures/*` from `output/*.json`
 - `_internal/plots/` — scratch figures from `tools/create_plots.py` (README plots live in `docs/assets/benchmarks/`)
+
+Benchmark result plots and paper claims must follow
+[`docs/plotting_and_statistics.md`](docs/plotting_and_statistics.md): use
+claim-first figures, keep exact matrices in tables, and avoid strict
+faster/slower language unless raw-run uncertainty supports it.
 - `_internal/assets/` — sample images, posters, one-off binaries
 - `_internal/notebooks/` — local Jupyter notebooks (the repo ignores `*.ipynb`; do not commit them)
 
@@ -131,7 +136,7 @@ If a system library is required (e.g. `brew install something`), add it to the *
 ### 6. Verify
 
 ```bash
-# Tests auto-discover the decoder once it is in REGISTRY and the package is installed
+# Tests auto-discover the decoder once its entry point is installed
 uv run pytest tests/ -v
 
 # Quick smoke run via the orchestrator
@@ -145,7 +150,7 @@ imread-benchmark run --libs foo --mode single \
 ```
 imread_benchmark/
 ├── decoders/
-│   ├── __init__.py          # BaseDecoder, REGISTRY
+│   ├── __init__.py          # BaseDecoder, entry-point REGISTRY
 │   ├── opencv_decoder.py
 │   └── ...                  # one file per library
 ├── benchmark.py             # timing loop with warmup

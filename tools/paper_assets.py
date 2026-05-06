@@ -13,12 +13,14 @@ Usage (from repo root, with plot extras):
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.patches import Patch
 
 from tools._results import LIBRARY_ORDER, load_dataloader_results, load_results, short_platform
 
@@ -62,8 +64,28 @@ ZEN4_PLATFORM = "linux_AMD-EPYC-9B14"
 ZEN5_PLATFORM = "linux_AMD-EPYC-9B45"
 
 WORKERS_ORDER = (0, 2, 4, 8)
+EXPECTED_SINGLE_DECODERS = set(LIBRARY_ORDER)
+EXPECTED_DATALOADER_DECODERS = set(LIBRARY_ORDER) - {"pyvips", "tensorflow"}
+EXPECTED_SKIP_DECODERS = {"jpeg4py", "kornia-rs", "turbojpeg"}
+ROBUSTNESS_DECODERS = ("jpeg4py", "kornia-rs", "turbojpeg", "pyvips", "tensorflow")
 
 FIG_DPI = 300
+CLAIM_FIGURE_BASENAMES: tuple[str, ...] = (
+    "fig01_protocol_rank_change",
+    "fig02_amd_worker_delta",
+    "fig03_tensorflow_arm_penalty",
+    "fig04_decoder_recommendation_summary",
+)
+RANK_CHANGE_PLATFORMS: tuple[str, ...] = (
+    "linux_INTEL(R)-XEON(R)-PLATINUM-8581C-CPU-@-2.30GHz",
+    ZEN4_PLATFORM,
+    "linux_Neoverse-V2",
+)
+RANK_CHANGE_HIGHLIGHTS: dict[str, str] = {
+    "linux_INTEL(R)-XEON(R)-PLATINUM-8581C-CPU-@-2.30GHz": "imageio",
+    ZEN4_PLATFORM: "torchvision",
+    "linux_Neoverse-V2": "imageio",
+}
 
 
 def _paper_scope(df: pd.DataFrame) -> pd.DataFrame:
@@ -110,6 +132,73 @@ def _fmt_ips(v: float | None) -> str:
     if pd.isna(v):
         return "—"
     return f"{v:.0f}"
+
+
+def _validate_platform_set(label: str, actual: set[str]) -> None:
+    expected_platforms = set(PAPER_PLATFORMS)
+    if actual != expected_platforms:
+        missing = sorted(expected_platforms - actual)
+        extra = sorted(actual - expected_platforms)
+        raise ValueError(f"{label} platform mismatch: missing={missing}, extra={extra}")
+
+
+def _validate_single_decoders(single: pd.DataFrame) -> None:
+    for plat in PAPER_PLATFORMS:
+        libs = set(single[single["platform"] == plat]["library"].unique())
+        if libs != EXPECTED_SINGLE_DECODERS:
+            missing = sorted(EXPECTED_SINGLE_DECODERS - libs)
+            extra = sorted(libs - EXPECTED_SINGLE_DECODERS)
+            raise ValueError(f"{plat} single-thread decoder mismatch: missing={missing}, extra={extra}")
+
+
+def _validate_dataloader_decoders(dl: pd.DataFrame) -> None:
+    expected_workers = set(WORKERS_ORDER)
+    for plat in PAPER_PLATFORMS:
+        dl_sub = dl[dl["platform"] == plat]
+        dl_libs = set(dl_sub["library"].unique())
+        if dl_libs != EXPECTED_DATALOADER_DECODERS:
+            missing = sorted(EXPECTED_DATALOADER_DECODERS - dl_libs)
+            extra = sorted(dl_libs - EXPECTED_DATALOADER_DECODERS)
+            raise ValueError(f"{plat} DataLoader decoder mismatch: missing={missing}, extra={extra}")
+        for lib in EXPECTED_DATALOADER_DECODERS:
+            workers = {int(w) for w in dl_sub[dl_sub["library"] == lib]["num_workers"].unique()}
+            if workers != expected_workers:
+                raise ValueError(f"{plat}/{lib} worker mismatch: got={sorted(workers)}")
+
+
+def _validate_skip_decoders(single: pd.DataFrame) -> None:
+    skipped = single[single["num_images_skipped"].fillna(0) > 0]
+    skipped_libs = set(skipped["library"].unique())
+    if skipped_libs != EXPECTED_SKIP_DECODERS:
+        raise ValueError(
+            "unexpected single-thread skip decoders: "
+            f"got={sorted(skipped_libs)}, expected={sorted(EXPECTED_SKIP_DECODERS)}",
+        )
+    for lib in EXPECTED_SKIP_DECODERS:
+        counts = skipped[skipped["library"] == lib]["num_images_skipped"].astype(int).tolist()
+        if counts != [1] * len(PAPER_PLATFORMS):
+            raise ValueError(f"{lib} skip counts must be 1 on every paper platform, got={counts}")
+
+
+def validate_paper_data(df_1t: pd.DataFrame, dl: pd.DataFrame) -> dict[str, int]:
+    """Validate the result matrix assumed by the paper narrative."""
+    single = _paper_scope(df_1t)
+    single = single[single["run_tag"] == "1t"]
+    dl = _paper_scope(dl)
+
+    _validate_platform_set("single-thread", set(single["platform"].unique()))
+    _validate_platform_set("DataLoader", set(dl["platform"].unique()))
+    _validate_single_decoders(single)
+    _validate_dataloader_decoders(dl)
+    _validate_skip_decoders(single)
+
+    return {
+        "platforms": len(PAPER_PLATFORMS),
+        "single_thread_decoders": len(EXPECTED_SINGLE_DECODERS),
+        "dataloader_decoders": len(EXPECTED_DATALOADER_DECODERS),
+        "single_thread_rows": len(single),
+        "dataloader_worker_rows": len(dl),
+    }
 
 
 def generate_hardware_table(df_1t: pd.DataFrame, dest: Path) -> None:
@@ -253,39 +342,115 @@ def generate_amd_w4_w8_table(dl: pd.DataFrame, dest: Path) -> None:
 
 
 def generate_recommendation_table(dl: pd.DataFrame, dest: Path) -> None:
-    dl = _paper_scope(dl)
-    peak = _peak_dataloader_rows(dl)
-    plat_labels = _platform_labels(_cpu_by_platform(dl))
-    headers = ["Platform", "Winner (peak DL)", "Winner img/s", "OpenCV img/s", "OpenCV % of winner"]
+    norm = _peak_pct_of_platform_winner(dl)
+    summary = (
+        norm.groupby("library", as_index=False)["pct_of_winner"]
+        .agg(mean="mean", min="min", max="max")
+        .set_index("library")
+    )
+    recommendation_order = ["torchvision", "simplejpeg", "opencv"]
+    headers = [
+        "Decoder",
+        "Mean % of winner",
+        "Min %",
+        "Max %",
+        "Skipped JPEGs",
+        "DataLoader platforms",
+    ]
     rows: list[list[str]] = []
-    for plat in PAPER_PLATFORMS:
-        sub = peak[peak["platform"] == plat]
-        if sub.empty:
+    for lib in recommendation_order:
+        if lib not in summary.index:
             continue
-        win_idx = sub["peak_ips"].idxmax()
-        winner = str(sub.loc[win_idx, "library"])
-        win_ips = float(sub.loc[win_idx, "peak_ips"])
-        oc = sub[sub["library"] == "opencv"]
-        if oc.empty:
-            rows.append([plat_labels[plat], winner, f"{win_ips:.0f}", "—", "—"])
-            continue
-        oc_ips = float(oc["peak_ips"].iloc[0])
-        pct = 100.0 * oc_ips / win_ips if win_ips else 0.0
+        vals = summary.loc[lib]
+        platform_count = int(norm[norm["library"] == lib]["platform"].nunique())
+        skip_text = "1 / 50,000" if lib in EXPECTED_SKIP_DECODERS else "0 / 50,000"
         rows.append(
             [
-                plat_labels[plat],
-                f"`{winner}`",
-                f"{win_ips:.0f}",
-                f"{oc_ips:.0f}",
-                f"{pct:.1f}%",
+                f"`{lib}`",
+                f"{vals['mean']:.1f}%",
+                f"{vals['min']:.1f}%",
+                f"{vals['max']:.1f}%",
+                skip_text,
+                f"{platform_count} / {len(PAPER_PLATFORMS)}",
             ],
         )
     note = (
-        "\n_OpenCV peak DataLoader throughput as a fraction of the platform winner "
-        "(among decoders with DataLoader JSON)._\n"
+        "\n_Peak DataLoader throughput normalized to the platform-local winner. "
+        "This table lists the zero-skip choices above the 90% practical floor on every paper platform._\n"
     )
     dest.write_text(
-        "# Table 5 — OpenCV vs per-platform DataLoader winner\n\n" + note + "\n" + _md_table(headers, rows),
+        "# Table 6 — Robust zero-skip near-optimal DataLoader choices\n\n" + note + "\n" + _md_table(headers, rows),
+        encoding="utf-8",
+    )
+
+
+def _raw_library_name(library: str) -> str:
+    return "kornia" if library == "kornia-rs" else library
+
+
+def _first_skip_example(input_dir: Path, library: str) -> str:
+    raw = _raw_library_name(library)
+    for plat in PAPER_PLATFORMS:
+        for suffix in ("1t_results", "dataloader_results"):
+            path = input_dir / plat / f"{raw}_{suffix}.json"
+            if not path.exists():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if suffix == "1t_results":
+                examples = data.get("benchmark_results", {}).get("skip_examples", [])
+            else:
+                examples = data.get("skip_examples", [])
+            if examples:
+                return str(examples[0]).replace("|", "\\|")
+    return "—"
+
+
+def _skip_summary(df_1t: pd.DataFrame, library: str) -> str:
+    single = _paper_scope(df_1t)
+    single = single[(single["run_tag"] == "1t") & (single["library"] == library)]
+    counts = single["num_images_skipped"].fillna(0).astype(int).tolist()
+    if not counts or max(counts) == 0:
+        return "0 / 50,000 on all five platforms"
+    if counts == [1] * len(PAPER_PLATFORMS):
+        return "1 / 50,000 on all five platforms"
+    return ", ".join(str(c) for c in counts)
+
+
+def _dataloader_eligibility(input_dir: Path, library: str) -> str:
+    raw = _raw_library_name(library)
+    present = [(input_dir / plat / f"{raw}_dataloader_results.json").exists() for plat in PAPER_PLATFORMS]
+    if all(present):
+        return "Yes"
+    if not any(present) and library == "pyvips":
+        return "No: disabled for forked PyTorch workers"
+    if not any(present) and library == "tensorflow":
+        return "No: TensorFlow stack not run inside PyTorch DataLoader"
+    return f"Partial: {sum(present)} / {len(PAPER_PLATFORMS)} platforms"
+
+
+def generate_robustness_table(input_dir: Path, df_1t: pd.DataFrame, dest: Path) -> None:
+    headers = ["Decoder", "DataLoader eligibility", "Skipped images", "Example failure", "Interpretation"]
+    interpretations = {
+        "jpeg4py": "Fast path, but needs an explicit CMYK fallback policy.",
+        "kornia-rs": "Fast path, but rejects the same uncommon ImageNet image.",
+        "turbojpeg": "Fast path, but needs an explicit CMYK fallback policy.",
+        "pyvips": "Single-thread numbers only; no loader-scale recommendation in this harness.",
+        "tensorflow": "Single-thread portability warning; re-benchmark exact build and pipeline.",
+    }
+    rows = [
+        [
+            f"`{lib}`",
+            _dataloader_eligibility(input_dir, lib),
+            _skip_summary(df_1t, lib),
+            _first_skip_example(input_dir, lib),
+            interpretations[lib],
+        ]
+        for lib in ROBUSTNESS_DECODERS
+    ]
+    dest.write_text(
+        "# Table 5 — Robustness and DataLoader eligibility\n\n"
+        "_Generated from skip fields in `*_1t_results.json` and `*_dataloader_results.json`._\n\n"
+        + _md_table(headers, rows),
         encoding="utf-8",
     )
 
@@ -295,83 +460,124 @@ def _lib_colors(libs: list[str]) -> dict[str, tuple]:
     return {lib: pal[i % len(pal)] for i, lib in enumerate(libs)}
 
 
-def plot_fig01_dataloader_scaling(dl: pd.DataFrame, out_dir: Path, formats: tuple[str, ...]) -> None:
+def _rank_frame(single: pd.DataFrame, dl: pd.DataFrame, platform: str) -> pd.DataFrame:
+    libs = sorted(EXPECTED_DATALOADER_DECODERS)
+    single_sub = single[
+        (single["platform"] == platform) & (single["run_tag"] == "1t") & (single["library"].isin(libs))
+    ].copy()
+    peaks = _peak_dataloader_rows(dl)
+    peak_sub = peaks[(peaks["platform"] == platform) & (peaks["library"].isin(libs))].copy()
+    single_sub["single_rank"] = single_sub["images_per_second"].rank(method="min", ascending=False).astype(int)
+    peak_sub["dataloader_rank"] = peak_sub["peak_ips"].rank(method="min", ascending=False).astype(int)
+    ranks = single_sub[["library", "single_rank"]].merge(
+        peak_sub[["library", "dataloader_rank"]],
+        on="library",
+        how="inner",
+    )
+    ranks["rank_delta"] = ranks["single_rank"] - ranks["dataloader_rank"]
+    return ranks.sort_values(["rank_delta", "library"], ascending=[True, True])
+
+
+def plot_fig01_protocol_rank_change(
+    single: pd.DataFrame,
+    dl: pd.DataFrame,
+    out_dir: Path,
+    formats: tuple[str, ...],
+) -> None:
+    single = _paper_scope(single)
     dl = _paper_scope(dl)
-    cpu_map = _cpu_by_platform(dl)
-    plat_labels = _platform_labels(cpu_map)
-    libs = [lib for lib in _ordered_libs_present(dl) if lib != "pyvips"]
-    colors = _lib_colors(libs)
+    plat_labels = _platform_labels(_cpu_by_platform(single))
+    fig, axes = plt.subplots(1, 3, figsize=(11.8, 5.4), sharey=False, constrained_layout=True)
 
-    fig, axes = plt.subplots(2, 3, figsize=(14, 8), constrained_layout=True)
-    ax_list = [axes[0, 0], axes[0, 1], axes[0, 2], axes[1, 0], axes[1, 1]]
-    axes[1, 2].axis("off")
+    for ax, plat in zip(axes, RANK_CHANGE_PLATFORMS, strict=True):
+        ranks = _rank_frame(single, dl, plat)
+        highlight = RANK_CHANGE_HIGHLIGHTS[plat]
+        y = np.arange(len(ranks))
+        colors = []
+        for row in ranks.itertuples(index=False):
+            if row.library == highlight:
+                colors.append("#1f77b4")
+            elif row.rank_delta > 0:
+                colors.append("#2ca02c")
+            elif row.rank_delta < 0:
+                colors.append("#e15759")
+            else:
+                colors.append("0.68")
 
-    for ax, plat in zip(ax_list, PAPER_PLATFORMS, strict=True):
-        for lib in libs:
-            xs = []
-            ys = []
-            for w in WORKERS_ORDER:
-                sub = dl[(dl["platform"] == plat) & (dl["library"] == lib) & (dl["num_workers"] == w)]
-                if sub.empty:
-                    continue
-                xs.append(w)
-                ys.append(float(sub["images_per_second"].iloc[0]))
-            if len(xs) < 2:
+        ax.barh(y, ranks["rank_delta"], color=colors, alpha=0.9)
+        ax.axvline(0, color="0.25", linewidth=1.1)
+        for i, row in enumerate(ranks.itertuples(index=False)):
+            if row.rank_delta == 0:
                 continue
-            ax.plot(
-                xs,
-                ys,
-                marker="o",
-                linewidth=1.8,
-                label=lib,
-                color=colors[lib],
+            ha = "left" if row.rank_delta > 0 else "right"
+            offset = 0.18 if row.rank_delta > 0 else -0.18
+            ax.text(
+                row.rank_delta + offset,
+                i,
+                f"{row.single_rank}->{row.dataloader_rank}",
+                ha=ha,
+                va="center",
+                fontsize=7.5,
+                fontweight="bold" if row.library == highlight else "normal",
+                color="#1f77b4" if row.library == highlight else "0.2",
             )
-        ax.set_title(plat_labels[plat], fontsize=11, fontweight="bold")
-        ax.set_xlabel("num_workers")
-        ax.set_ylabel("images/s")
-        ax.set_xticks(list(WORKERS_ORDER))
-        ax.grid(True, axis="y", alpha=0.3)
+        ax.set_title(plat_labels[plat], fontsize=10, fontweight="bold")
+        ax.set_xlim(-8.5, 8.5)
+        ax.set_xticks([-8, -4, 0, 4, 8])
+        ax.set_yticks(y)
+        ax.set_yticklabels(ranks["library"])
+        ax.invert_yaxis()
+        ax.grid(True, axis="x", alpha=0.22)
+        ax.set_xlabel("Rank change")
 
-    handles, labels = ax_list[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=6, fontsize=8, frameon=False, bbox_to_anchor=(0.5, 0.02))
-    fig.suptitle("DataLoader scaling (selected decoders, PyVips excluded)", fontsize=13, fontweight="bold")
+    axes[0].set_ylabel("Decoder")
+    fig.suptitle("Protocol changes the supported decoder recommendation", fontsize=13, fontweight="bold")
+    fig.supxlabel(
+        "single-thread rank - peak DataLoader rank (positive = moves up under DataLoader)",
+        fontsize=10,
+    )
 
-    base = out_dir / "fig01_dataloader_scaling"
+    base = out_dir / CLAIM_FIGURE_BASENAMES[0]
     for fmt in formats:
         fig.savefig(base.with_suffix(f".{fmt}"), dpi=FIG_DPI, bbox_inches="tight")
     plt.close(fig)
 
 
-def plot_fig02_amd_w4_w8(dl: pd.DataFrame, out_dir: Path, formats: tuple[str, ...]) -> None:
+def plot_fig02_amd_worker_delta(dl: pd.DataFrame, out_dir: Path, formats: tuple[str, ...]) -> None:
     dl = _paper_scope(dl)
-    libs = [lib for lib in _ordered_libs_present(dl) if lib != "pyvips"]
-    x = np.arange(len(libs))
-    width = 0.18
+    libs = [lib for lib in _ordered_libs_present(dl) if lib not in {"pyvips", "tensorflow"}]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.6), sharey=True, constrained_layout=True)
+    labels = {ZEN4_PLATFORM: "AMD Zen 4", ZEN5_PLATFORM: "AMD Zen 5"}
+    y = np.arange(len(libs))
 
-    z4_4 = [_ips_at_workers(dl, ZEN4_PLATFORM, lib, 4) for lib in libs]
-    z4_8 = [_ips_at_workers(dl, ZEN4_PLATFORM, lib, 8) for lib in libs]
-    z5_4 = [_ips_at_workers(dl, ZEN5_PLATFORM, lib, 4) for lib in libs]
-    z5_8 = [_ips_at_workers(dl, ZEN5_PLATFORM, lib, 8) for lib in libs]
+    for ax, plat in zip(axes, (ZEN4_PLATFORM, ZEN5_PLATFORM), strict=True):
+        deltas = []
+        colors = []
+        for lib in libs:
+            w4 = _ips_at_workers(dl, plat, lib, 4)
+            w8 = _ips_at_workers(dl, plat, lib, 8)
+            delta = np.nan if not w4 or w8 is None else 100.0 * (w8 / w4 - 1.0)
+            deltas.append(delta)
+            colors.append("#2ca02c" if delta >= 0 else "#d62728")
+        ax.barh(y, deltas, color=colors, alpha=0.88)
+        ax.axvline(0, color="0.25", linewidth=1.2)
+        for i, delta in enumerate(deltas):
+            if pd.isna(delta):
+                continue
+            ha = "left" if delta >= 0 else "right"
+            offset = 0.6 if delta >= 0 else -0.6
+            ax.text(delta + offset, i, f"{delta:+.0f}%", va="center", ha=ha, fontsize=8)
+        ax.set_title(labels[plat], fontsize=10, fontweight="bold")
+        ax.set_xlabel("Throughput change from w=4 to w=8")
+        ax.grid(True, axis="x", alpha=0.25)
+        ax.set_xlim(-18, 32)
 
-    z4_4_h = [v if v is not None else np.nan for v in z4_4]
-    z4_8_h = [v if v is not None else np.nan for v in z4_8]
-    z5_4_h = [v if v is not None else np.nan for v in z5_4]
-    z5_8_h = [v if v is not None else np.nan for v in z5_8]
+    axes[0].set_yticks(y)
+    axes[0].set_yticklabels(libs)
+    axes[0].invert_yaxis()
+    fig.suptitle("Worker-count scaling differs between AMD generations", fontsize=13, fontweight="bold")
 
-    fig, ax = plt.subplots(figsize=(14, 5), constrained_layout=True)
-    ax.bar(x - 1.5 * width, z4_4_h, width, label="Zen4 w=4")
-    ax.bar(x - 0.5 * width, z4_8_h, width, label="Zen4 w=8")
-    ax.bar(x + 0.5 * width, z5_4_h, width, label="Zen5 w=4")
-    ax.bar(x + 1.5 * width, z5_8_h, width, label="Zen5 w=8")
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(libs, rotation=35, ha="right")
-    ax.set_ylabel("images/s")
-    ax.set_title("AMD Zen 4 vs Zen 5: DataLoader throughput at w=4 vs w=8", fontweight="bold")
-    ax.legend(ncol=4, frameon=False)
-    ax.grid(True, axis="y", alpha=0.3)
-
-    base = out_dir / "fig02_amd_zen4_zen5_w4_w8"
+    base = out_dir / CLAIM_FIGURE_BASENAMES[1]
     for fmt in formats:
         fig.savefig(base.with_suffix(f".{fmt}"), dpi=FIG_DPI, bbox_inches="tight")
     plt.close(fig)
@@ -403,32 +609,48 @@ def _peak_pct_of_platform_winner(dl: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def plot_fig03_library_efficiency_heatmap(dl: pd.DataFrame, out_dir: Path, formats: tuple[str, ...]) -> None:
-    norm = _peak_pct_of_platform_winner(dl)
-    libs = _ordered_libs_present(norm)
-    plat_labels = _platform_labels(_cpu_by_platform(dl))
-    matrix = norm.pivot_table(index="library", columns="platform", values="pct_of_winner").reindex(
-        index=libs,
-        columns=list(PAPER_PLATFORMS),
-    )
+def plot_fig03_tensorflow_arm_penalty(single: pd.DataFrame, out_dir: Path, formats: tuple[str, ...]) -> None:
+    single = _paper_scope(single)
+    single = single[single["run_tag"] == "1t"].copy()
+    plat_labels = _platform_labels(_cpu_by_platform(single))
+    rows: list[dict] = []
+    for plat in PAPER_PLATFORMS:
+        sub = single[single["platform"] == plat]
+        tf = sub[sub["library"] == "tensorflow"]
+        if sub.empty or tf.empty:
+            continue
+        winner = float(sub["images_per_second"].max())
+        tf_ips = float(tf["images_per_second"].iloc[0])
+        rows.append(
+            {
+                "platform": plat,
+                "label": plat_labels[plat],
+                "pct": 100.0 * tf_ips / winner,
+                "ips": tf_ips,
+            },
+        )
+    data = pd.DataFrame(rows)
 
-    fig, ax = plt.subplots(figsize=(10, 7), constrained_layout=True)
-    sns.heatmap(
-        matrix,
-        ax=ax,
-        cmap="viridis",
-        vmin=75,
-        vmax=100,
-        annot=True,
-        fmt=".0f",
-        linewidths=0.5,
-        cbar_kws={"label": "% of platform winner"},
-    )
+    fig, ax = plt.subplots(figsize=(8.4, 4.3), constrained_layout=True)
+    colors = ["#d62728" if "Neoverse" in row.label else "#4c78a8" for row in data.itertuples(index=False)]
+    bars = ax.bar(data["label"], data["pct"], color=colors, alpha=0.9)
+    ax.axhline(100, color="0.35", linewidth=1.0, linestyle="--")
+    for bar, row in zip(bars, data.itertuples(index=False), strict=True):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 1.2,
+            f"{row.pct:.0f}%\n{row.ips:.0f} img/s",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+    ax.set_ylim(0, 110)
+    ax.set_ylabel("TensorFlow single-thread throughput\n(% of platform winner)")
     ax.set_xlabel("")
-    ax.set_ylabel("")
-    ax.set_xticklabels([plat_labels[p] for p in PAPER_PLATFORMS], rotation=25, ha="right")
-    ax.set_title("Peak DataLoader throughput by decoder (% of platform winner)", fontweight="bold")
-    base = out_dir / "fig03_decoder_efficiency_heatmap"
+    ax.tick_params(axis="x", rotation=20)
+    ax.set_title("TensorFlow JPEG decode shows a large ARM penalty", fontweight="bold")
+    ax.grid(True, axis="y", alpha=0.25)
+    base = out_dir / CLAIM_FIGURE_BASENAMES[2]
     for fmt in formats:
         fig.savefig(base.with_suffix(f".{fmt}"), dpi=FIG_DPI, bbox_inches="tight")
     plt.close(fig)
@@ -446,24 +668,69 @@ def plot_fig04_cross_platform_recommendation(dl: pd.DataFrame, out_dir: Path, fo
         .sort_values("mean", ascending=True)
     )
     platform_points = norm[norm["library"].isin(summary.index)]
-    colors = _lib_colors(list(summary.index))
 
-    fig, ax = plt.subplots(figsize=(9, 5.5), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(9.2, 5.6), constrained_layout=True)
     y = np.arange(len(summary))
-    ax.hlines(y, summary["min"], summary["max"], color="0.75", linewidth=3, label="platform range")
-    ax.scatter(summary["mean"], y, s=70, color=[colors[lib] for lib in summary.index], zorder=3, label="mean")
+    x_min = 70.0
+    zero_skip_color = "#2b8cbe"
+    skip_color = "#f2a541"
+    for i, lib in enumerate(summary.index):
+        has_skip = lib in EXPECTED_SKIP_DECODERS
+        ax.barh(
+            i,
+            summary.loc[lib, "mean"] - x_min,
+            left=x_min,
+            height=0.58,
+            color=skip_color if has_skip else zero_skip_color,
+            alpha=0.74,
+            hatch="//" if has_skip else None,
+            edgecolor="white",
+            linewidth=0.7,
+            zorder=2,
+        )
+    ax.errorbar(
+        summary["mean"],
+        y,
+        xerr=[summary["mean"] - summary["min"], summary["max"] - summary["mean"]],
+        fmt="none",
+        ecolor="0.25",
+        elinewidth=1.2,
+        capsize=3,
+        zorder=3,
+    )
     for i, lib in enumerate(summary.index):
         pts = platform_points[platform_points["library"] == lib]["pct_of_winner"]
-        ax.scatter(pts, np.full(len(pts), i), s=18, color=colors[lib], alpha=0.45, zorder=2)
+        has_skip = lib in EXPECTED_SKIP_DECODERS
+        ax.scatter(
+            pts,
+            np.full(len(pts), i),
+            s=22,
+            color="white",
+            edgecolor=skip_color if has_skip else zero_skip_color,
+            linewidth=0.8,
+            alpha=0.85,
+            zorder=4,
+        )
 
+    ax.axvline(90, color="0.35", linestyle="--", linewidth=1.0, zorder=1)
+    ax.text(90.25, len(summary) - 0.25, "90% practical floor", fontsize=7, color="0.35", va="top")
     ax.set_yticks(y)
     ax.set_yticklabels(summary.index)
-    ax.set_xlim(70, 102)
+    ax.set_xlim(x_min, 103)
     ax.set_xlabel("Peak DataLoader throughput (% of platform winner)")
-    ax.set_title("How close each decoder gets to the best decoder on each platform", fontweight="bold")
+    ax.set_title("DataLoader speed and observed JPEG robustness", fontweight="bold")
     ax.grid(True, axis="x", alpha=0.3)
-    ax.legend(frameon=False, loc="lower right")
-    base = out_dir / "fig04_decoder_recommendation_summary"
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(
+        handles=[
+            Patch(facecolor=zero_skip_color, edgecolor="white", label="zero observed skips"),
+            Patch(facecolor=skip_color, edgecolor="white", hatch="//", label="one skipped JPEG"),
+        ],
+        frameon=False,
+        loc="lower right",
+        fontsize=8,
+    )
+    base = out_dir / CLAIM_FIGURE_BASENAMES[3]
     for fmt in formats:
         fig.savefig(base.with_suffix(f".{fmt}"), dpi=FIG_DPI, bbox_inches="tight")
     plt.close(fig)
@@ -472,15 +739,23 @@ def plot_fig04_cross_platform_recommendation(dl: pd.DataFrame, out_dir: Path, fo
 def generate_tables(input_dir: Path, paper_dir: Path) -> None:
     df_1t = load_results(input_dir)
     dl = load_dataloader_results(input_dir)
+    validate_paper_data(df_1t, dl)
     gen = paper_dir / "generated"
     gen.mkdir(parents=True, exist_ok=True)
     generate_hardware_table(df_1t, gen / "table01_hardware.md")
     generate_single_thread_table(df_1t, gen / "table02_single_thread.md")
     generate_peak_dataloader_table(dl, gen / "table03_peak_dataloader.md")
     generate_amd_w4_w8_table(dl, gen / "table04_amd_w4_w8.md")
-    generate_recommendation_table(dl, gen / "table05_opencv_vs_winner.md")
+    generate_robustness_table(input_dir, df_1t, gen / "table05_robustness.md")
+    generate_recommendation_table(dl, gen / "table06_recommendation_tier.md")
     (gen / "README.md").write_text(
         "# Generated paper tables\n\n"
+        "- `table01_hardware.md`\n"
+        "- `table02_single_thread.md`\n"
+        "- `table03_peak_dataloader.md`\n"
+        "- `table04_amd_w4_w8.md`\n"
+        "- `table05_robustness.md`\n"
+        "- `table06_recommendation_tier.md`\n\n"
         "Regenerate from repo root:\n\n"
         "```bash\n"
         "uv run --extra plot python -m tools.paper_assets --tables\n"
@@ -491,12 +766,14 @@ def generate_tables(input_dir: Path, paper_dir: Path) -> None:
 
 def generate_figures(input_dir: Path, paper_dir: Path, formats: tuple[str, ...]) -> None:
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.1)
+    df_1t = load_results(input_dir)
     dl = load_dataloader_results(input_dir)
+    validate_paper_data(df_1t, dl)
     fig_dir = paper_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
-    plot_fig01_dataloader_scaling(dl, fig_dir, formats)
-    plot_fig02_amd_w4_w8(dl, fig_dir, formats)
-    plot_fig03_library_efficiency_heatmap(dl, fig_dir, formats)
+    plot_fig01_protocol_rank_change(df_1t, dl, fig_dir, formats)
+    plot_fig02_amd_worker_delta(dl, fig_dir, formats)
+    plot_fig03_tensorflow_arm_penalty(df_1t, fig_dir, formats)
     plot_fig04_cross_platform_recommendation(dl, fig_dir, formats)
 
 
@@ -528,6 +805,7 @@ def main() -> None:
     parser.add_argument("--tables", action="store_true", help="Write Markdown tables under paper-dir/generated/.")
     parser.add_argument("--figures", action="store_true", help="Write figures under paper-dir/figures/.")
     parser.add_argument("--all", action="store_true", help="Tables + figures.")
+    parser.add_argument("--check", action="store_true", help="Validate the paper result matrix without writing files.")
     parser.add_argument(
         "--format",
         type=str,
@@ -539,6 +817,17 @@ def main() -> None:
     input_dir = (root / args.input).resolve()
     paper_dir = (root / args.paper_dir).resolve()
     fmt = _parse_formats(args.format)
+
+    if args.check:
+        summary = validate_paper_data(load_results(input_dir), load_dataloader_results(input_dir))
+        print(
+            "paper data ok: "
+            f"{summary['platforms']} platforms, "
+            f"{summary['single_thread_decoders']} single-thread decoders, "
+            f"{summary['dataloader_decoders']} DataLoader decoders, "
+            f"{summary['dataloader_worker_rows']} DataLoader worker rows",
+        )
+        return
 
     do_tables = args.tables or args.all
     do_figures = args.figures or args.all
