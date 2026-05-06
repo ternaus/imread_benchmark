@@ -263,23 +263,6 @@ output/
 
 - `opencv` remains the best choice when you need more than just JPEG decoding
 
-## Paper and Publication Assets
-
-The public README plots are generated under `docs/assets/benchmarks/`:
-
-```bash
-imread-benchmark plot --input output --output docs/assets/benchmarks
-imread-benchmark render-readme
-```
-
-Publication-style tables and figures are generated from the same JSON outputs into ignored local files under `_internal/papers/`:
-
-```bash
-uv run --extra plot python -m tools.paper_assets --all
-```
-
-`_internal/` is intentionally gitignored. Commit the source JSON and public README assets, not local manuscript drafts or generated paper PDFs.
-
 ## Development
 
 ```bash
