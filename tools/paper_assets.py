@@ -429,10 +429,11 @@ def _skip_summary(df_1t: pd.DataFrame, library: str) -> str:
     single = _paper_scope(df_1t)
     single = single[(single["run_tag"] == "1t") & (single["library"] == library)]
     counts = single["num_images_skipped"].fillna(0).astype(int).tolist()
+    platform_count = len(PAPER_PLATFORMS)
     if not counts or max(counts) == 0:
-        return "0 / 50,000 on all five platforms"
-    if counts == [1] * len(PAPER_PLATFORMS):
-        return "1 / 50,000 on all five platforms"
+        return f"0 / 50,000 on all {platform_count} platforms"
+    if counts == [1] * platform_count:
+        return f"1 / 50,000 on all {platform_count} platforms"
     return ", ".join(str(c) for c in counts)
 
 
@@ -579,7 +580,7 @@ def plot_fig02_amd_worker_delta(dl: pd.DataFrame, out_dir: Path, formats: tuple[
         for lib in libs:
             w4 = _ips_at_workers(dl, plat, lib, 4)
             w8 = _ips_at_workers(dl, plat, lib, 8)
-            delta = np.nan if not w4 or w8 is None else 100.0 * (w8 / w4 - 1.0)
+            delta = np.nan if w4 is None or w8 is None else 100.0 * (w8 / w4 - 1.0)
             deltas.append(delta)
             colors.append("#2ca02c" if delta >= 0 else "#d62728")
         ax.barh(y, deltas, color=colors, alpha=0.88)
