@@ -7,9 +7,9 @@ This repository contains the anonymous review artifact for the paper
 
 - `imread_benchmark/`: benchmark package and decoder adapters.
 - `tests/`: unit and smoke tests for benchmark behavior and decoder agreement.
-- `output/`: JSON benchmark outputs used for the paper tables and plots.
+- `output/`: JSON benchmark outputs used for the benchmark tables and plots.
 - `docs/assets/benchmarks/`: rendered benchmark figures.
-- `tools/`: utilities for plotting, README table rendering, and paper assets.
+- `tools/`: utilities for plotting and README table rendering.
 - `gcp/`: optional cloud orchestration scripts used for full benchmark runs.
 
 ## Environment
@@ -62,9 +62,9 @@ Expected behavior:
 - `list-libs` reports available and unavailable decoders;
 - plot regeneration overwrites the PNG files under `docs/assets/benchmarks/`.
 
-## Reproducing Benchmark Tables and Figures
+## Reproducing Tables and Figures
 
-The included paper results are stored as JSON files under `output/`. Regenerate
+The included benchmark results are stored as JSON files under `output/`. Regenerate
 the README tables and plots from those files with:
 
 ```bash
@@ -87,7 +87,7 @@ environment(s), installs the corresponding optional dependencies, and then runs
 the selected decoders. Later runs reuse those environments. Pass `--skip-setup`
 only if the worker environments are already present.
 
-The full paper runs used 50,000 ImageNet validation JPEGs and five repeated
+The full benchmark runs used 50,000 ImageNet validation JPEGs and five repeated
 runs per platform. ImageNet must be obtained separately under its own access
 terms.
 
@@ -96,10 +96,3 @@ terms.
 The `gcp/` scripts can launch full benchmark runs on Google Cloud VMs. They are
 not required for artifact inspection, but document the infrastructure used for
 the cross-CPU measurements. See `docs/gcp_benchmarks.md`.
-
-## Anonymization
-
-This artifact branch removes author-identifying names, personal sponsorship
-metadata, and public repository-account references from tracked files. Public
-citation and license attribution should be restored for the camera-ready public
-release.

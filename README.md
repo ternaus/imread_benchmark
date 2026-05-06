@@ -8,7 +8,7 @@
 - isolated per-library worker environments so conflicting stacks can be benchmarked in one run,
 - PyTorch `DataLoader` throughput measurements in addition to single-thread decoder speed,
 - Google Cloud runners for repeatable cloud CPU comparisons, and
-- JSON outputs plus generated plots/tables for README, docs, and publication-ready analysis.
+- JSON outputs plus generated plots and tables for inspection and reproduction.
 
 The default benchmark uses the ImageNet validation set and reports RGB `uint8` decode throughput across common Python libraries and CPU families.
 
@@ -259,25 +259,11 @@ output/
 
 - `opencv` remains the best choice when you need more than just JPEG decoding
 
-## Development
-
-```bash
-# Run tests
-uv run pytest tests/ -v
-
-# Run linters
-uv run pre-commit run --all-files
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add a new decoder.
-
 ## NeurIPS E&D Artifact Notes
 
-This branch is prepared for anonymous NeurIPS Evaluations & Datasets review.
-The code artifact intentionally avoids author names, personal account links,
-and institution-specific metadata. Reviewers can inspect the included benchmark
-results in `output/`, regenerate plots from those results, or run a smoke
-benchmark on a local JPEG directory.
+This branch is prepared for NeurIPS Evaluations & Datasets review. Reviewers
+can inspect the included benchmark results in `output/`, regenerate plots from
+those results, or run a smoke benchmark on a local JPEG directory.
 
 Recommended reviewer checks:
 
@@ -301,16 +287,3 @@ uv run imread-benchmark run --data-dir /path/to/jpeg/dir \
 
 The benchmark command creates the required per-group worker environments under
 `venvs/` automatically unless `--skip-setup` is passed.
-
-## Citation
-
-Citation information is omitted from this anonymous review artifact. It will be
-restored in the public camera-ready repository.
-
-```bibtex
-@misc{anonymous2026jpeg,
-      title={Need for Speed: A Comprehensive Benchmark of JPEG Decoders in Python},
-      author={Anonymous Authors},
-      year={2026}
-}
-```
