@@ -24,22 +24,6 @@ faster/slower language unless raw-run uncertainty supports it.
 
 Nothing under `_internal/` is tracked by git.
 
-## Preparing an anonymous review mirror
-
-The public repository intentionally keeps public identity links. If you need a
-double-blind review artifact, create a separate branch or mirror and remove
-identity surfaces there, not in regular public cleanup PRs.
-
-Checklist for that later anonymous branch:
-
-- remove the GitAds block from `README.md`
-- remove or replace `.github/FUNDING.yml`
-- replace the public citation block in `README.md` with an anonymous artifact note
-- remove direct links to public GitHub profiles, public repository URLs, and author names
-- replace personal or project-specific GCS examples with neutral placeholders if needed
-- verify with `rg -i 'ternaus|iglovikov|vladimir|gitads|github sponsors|2501.13131'`
-- keep `_internal/` ignored; do not publish manuscript drafts by accident
-
 ## Running tests
 
 ```bash

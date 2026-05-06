@@ -93,10 +93,6 @@ Current headline patterns:
 - OpenCV is rarely the absolute winner, but is consistently close to the local winner and has successful `DataLoader` results on every platform.
 - PyVips is reported for single-thread decode only; it is skipped in fork-based `DataLoader` benchmarks because of libvips threadpool deadlocks in this harness.
 
-## GitAds Sponsored
-
-[Sponsored by GitAds](https://gitads.dev/v1/ad-track?source=ternaus/imread_benchmark@github)
-
 ## Important Note on Image Conversion
 
 All decoders output `(H, W, 3)` uint8 RGB numpy arrays for a fair comparison. Libraries that default to other formats (OpenCV → BGR, torchvision → CHW tensor, TensorFlow → EagerTensor) include a conversion step. Note that in real ML pipelines the conversion is often unnecessary.
@@ -275,18 +271,46 @@ uv run pre-commit run --all-files
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add a new decoder.
 
+## NeurIPS E&D Artifact Notes
+
+This branch is prepared for anonymous NeurIPS Evaluations & Datasets review.
+The code artifact intentionally avoids author names, personal account links,
+and institution-specific metadata. Reviewers can inspect the included benchmark
+results in `output/`, regenerate plots from those results, or run a smoke
+benchmark on a local JPEG directory.
+
+Recommended reviewer checks:
+
+```bash
+uv venv && source .venv/bin/activate
+uv pip install -e .
+uv run pytest tests/ -v
+uv run imread-benchmark list-libs
+uv pip install -e '.[plot]'
+uv run imread-benchmark plot --input output --output docs/assets/benchmarks
+```
+
+For an end-to-end benchmark run, download ImageNet validation JPEGs or point
+`--data-dir` to another JPEG directory:
+
+```bash
+uv run imread-benchmark run --data-dir /path/to/jpeg/dir \
+    --num-images 2000 --num-runs 5 --dataloader-runs 2 \
+    --workers 0,2
+```
+
+The benchmark command creates the required per-group worker environments under
+`venvs/` automatically unless `--skip-setup` is passed.
+
 ## Citation
 
-If you found this work useful, please cite:
+Citation information is omitted from this anonymous review artifact. It will be
+restored in the public camera-ready repository.
 
 ```bibtex
-@misc{iglovikov2025speed,
+@misc{anonymous2026jpeg,
       title={Need for Speed: A Comprehensive Benchmark of JPEG Decoders in Python},
-      author={Vladimir Iglovikov},
-      year={2025},
-      eprint={2501.13131},
-      archivePrefix={arXiv},
-      primaryClass={eess.IV},
-      doi={10.48550/arXiv.2501.13131}
+      author={Anonymous Authors},
+      year={2026}
 }
 ```
