@@ -15,14 +15,34 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from matplotlib.patches import Patch
 
 from tools._results import LIBRARY_ORDER, load_dataloader_results, load_results, short_platform
+
+if TYPE_CHECKING:
+    from types import ModuleType
+
+plt: Any = None
+sns: Any = None
+Patch: Any = None
+
+
+def _require_plotting() -> tuple[ModuleType, ModuleType, type]:
+    global Patch, plt, sns
+    if plt is not None and sns is not None and Patch is not None:
+        return plt, sns, Patch
+    try:
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        from matplotlib.patches import Patch
+    except ImportError as exc:
+        msg = "Figure generation requires matplotlib and seaborn. Install with `uv sync --extra plot`."
+        raise RuntimeError(msg) from exc
+    return plt, sns, Patch
+
 
 # ---------------------------------------------------------------------------
 # Paper scope: five GCP -standard-16 platforms (directory names under output/)
@@ -456,6 +476,7 @@ def generate_robustness_table(input_dir: Path, df_1t: pd.DataFrame, dest: Path) 
 
 
 def _lib_colors(libs: list[str]) -> dict[str, tuple]:
+    _require_plotting()
     pal = sns.color_palette("tab20", n_colors=max(20, len(libs)))
     return {lib: pal[i % len(pal)] for i, lib in enumerate(libs)}
 
@@ -484,6 +505,7 @@ def plot_fig01_protocol_rank_change(
     out_dir: Path,
     formats: tuple[str, ...],
 ) -> None:
+    _require_plotting()
     single = _paper_scope(single)
     dl = _paper_scope(dl)
     plat_labels = _platform_labels(_cpu_by_platform(single))
@@ -544,6 +566,7 @@ def plot_fig01_protocol_rank_change(
 
 
 def plot_fig02_amd_worker_delta(dl: pd.DataFrame, out_dir: Path, formats: tuple[str, ...]) -> None:
+    _require_plotting()
     dl = _paper_scope(dl)
     libs = [lib for lib in _ordered_libs_present(dl) if lib not in {"pyvips", "tensorflow"}]
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.6), sharey=True, constrained_layout=True)
@@ -610,6 +633,7 @@ def _peak_pct_of_platform_winner(dl: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_fig03_tensorflow_arm_penalty(single: pd.DataFrame, out_dir: Path, formats: tuple[str, ...]) -> None:
+    _require_plotting()
     single = _paper_scope(single)
     single = single[single["run_tag"] == "1t"].copy()
     plat_labels = _platform_labels(_cpu_by_platform(single))
@@ -657,6 +681,7 @@ def plot_fig03_tensorflow_arm_penalty(single: pd.DataFrame, out_dir: Path, forma
 
 
 def plot_fig04_cross_platform_recommendation(dl: pd.DataFrame, out_dir: Path, formats: tuple[str, ...]) -> None:
+    _require_plotting()
     norm = _peak_pct_of_platform_winner(dl)
     libs = _ordered_libs_present(norm)
     summary = (
@@ -765,6 +790,7 @@ def generate_tables(input_dir: Path, paper_dir: Path) -> None:
 
 
 def generate_figures(input_dir: Path, paper_dir: Path, formats: tuple[str, ...]) -> None:
+    _require_plotting()
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.1)
     df_1t = load_results(input_dir)
     dl = load_dataloader_results(input_dir)
