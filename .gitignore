@@ -113,6 +113,11 @@ venv.bak/
 .ruff_cache/
 
 venvs/
+venvs_dataloader/
+
+# Local benchmark scratch output / Codex workspace helpers
+.benchmarks/
+.codex/
 
 # Jupyter — not tracked (use `_internal/` or a local clone path if needed)
 *.ipynb

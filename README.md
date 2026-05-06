@@ -21,11 +21,15 @@ imread-benchmark plot --input output --output docs/assets/benchmarks
 imread-benchmark render-readme
 ```
 
-The plot labels show `img/s` and `% of the fastest decoder on that CPU`, so darker cells are the winners for that platform.
+The figures below are claim-first summaries: full numeric matrices remain in the tables.
 
-![Single-thread JPEG decode throughput](docs/assets/benchmarks/single_thread_overview.png)
+![Protocol changes decoder recommendations](docs/assets/benchmarks/fig01_protocol_rank_change.png)
 
-![Peak PyTorch DataLoader throughput](docs/assets/benchmarks/dataloader_peak_overview.png)
+![Worker-count scaling differs between AMD generations](docs/assets/benchmarks/fig02_amd_worker_delta.png)
+
+![TensorFlow JPEG decode shows a large ARM penalty](docs/assets/benchmarks/fig03_tensorflow_arm_penalty.png)
+
+![Near-optimality and platform range for operational decoder choice](docs/assets/benchmarks/fig04_decoder_recommendation_summary.png)
 
 ### Single-thread decode throughput (img/s)
 
