@@ -123,7 +123,7 @@ def test_validate_paper_data_incorrect_num_images_skipped_raises() -> None:
 
 def test_robustness_table_surfaces_only_observed_skip_decoders(tmp_path: Path) -> None:
     root = _repo_output()
-    dest = tmp_path / "table06_robustness.md"
+    dest = tmp_path / "table05_robustness.md"
     generate_robustness_table(root, load_results(root), dest)
 
     text = dest.read_text(encoding="utf-8")

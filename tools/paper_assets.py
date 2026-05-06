@@ -396,10 +396,10 @@ def generate_recommendation_table(dl: pd.DataFrame, dest: Path) -> None:
         )
     note = (
         "\n_Peak DataLoader throughput normalized to the platform-local winner. "
-        "This table lists the zero-skip choices above the 90% practical floor on every paper platform._\n"
+        "This curated table highlights operationally relevant choices used in the paper discussion._\n"
     )
     dest.write_text(
-        "# Table 6 — Robust zero-skip near-optimal DataLoader choices\n\n" + note + "\n" + _md_table(headers, rows),
+        "# Table 6 — Operational DataLoader recommendation summary\n\n" + note + "\n" + _md_table(headers, rows),
         encoding="utf-8",
     )
 
@@ -544,9 +544,11 @@ def plot_fig01_protocol_rank_change(
                 fontweight="bold" if row.library == highlight else "normal",
                 color="#1f77b4" if row.library == highlight else "0.2",
             )
+        limit = max(float(ranks["rank_delta"].abs().max()), len(ranks) - 1) + 0.5
+        tick_limit = int(limit - 0.5)
         ax.set_title(plat_labels[plat], fontsize=10, fontweight="bold")
-        ax.set_xlim(-8.5, 8.5)
-        ax.set_xticks([-8, -4, 0, 4, 8])
+        ax.set_xlim(-limit, limit)
+        ax.set_xticks([-tick_limit, -tick_limit // 2, 0, tick_limit // 2, tick_limit])
         ax.set_yticks(y)
         ax.set_yticklabels(ranks["library"])
         ax.invert_yaxis()
@@ -580,9 +582,12 @@ def plot_fig02_amd_worker_delta(dl: pd.DataFrame, out_dir: Path, formats: tuple[
         for lib in libs:
             w4 = _ips_at_workers(dl, plat, lib, 4)
             w8 = _ips_at_workers(dl, plat, lib, 8)
-            delta = np.nan if w4 is None or w8 is None else 100.0 * (w8 / w4 - 1.0)
+            delta = np.nan if w4 is None or w4 == 0 or w8 is None else 100.0 * (w8 / w4 - 1.0)
             deltas.append(delta)
-            colors.append("#2ca02c" if delta >= 0 else "#d62728")
+            if pd.isna(delta):
+                colors.append("0.68")
+            else:
+                colors.append("#2ca02c" if delta >= 0 else "#d62728")
         ax.barh(y, deltas, color=colors, alpha=0.88)
         ax.axvline(0, color="0.25", linewidth=1.2)
         for i, delta in enumerate(deltas):
