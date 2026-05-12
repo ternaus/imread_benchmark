@@ -12,6 +12,8 @@
 
 The default benchmark uses the ImageNet validation set and reports RGB `uint8` decode throughput across common Python libraries and CPU families.
 
+Preprint: [Single-Thread JPEG Decoder Benchmarks Mis-Evaluate ML Data Loaders](https://arxiv.org/abs/2605.08731).
+
 ## Results
 
 The plots and tables below are generated from `output/<platform>/*.json`. To refresh after a new run:
@@ -277,16 +279,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add a new decoder.
 
 ## Citation
 
-If you found this work useful, please cite:
+If you found this benchmark useful in your research or engineering work, please cite the preprint:
 
 ```bibtex
-@misc{iglovikov2025speed,
-      title={Need for Speed: A Comprehensive Benchmark of JPEG Decoders in Python},
+@misc{iglovikov2026singlethreadjpegdecoderbenchmarks,
+      title={Single-Thread JPEG Decoder Benchmarks Mis-Evaluate ML Data Loaders},
       author={Vladimir Iglovikov},
-      year={2025},
-      eprint={2501.13131},
+      year={2026},
+      eprint={2605.08731},
       archivePrefix={arXiv},
-      primaryClass={eess.IV},
-      doi={10.48550/arXiv.2501.13131}
+      primaryClass={cs.PF},
+      url={https://arxiv.org/abs/2605.08731},
 }
 ```
