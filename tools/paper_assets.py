@@ -430,19 +430,27 @@ def _format_platform_choice(row: pd.Series) -> str:
     return rf"\texttt{{{lib}}}: {ips:.0f} img/s ($w={workers}$)"
 
 
-def _platform_recommendation_rows(dl: pd.DataFrame) -> list[list[str]]:
+def _platform_recommendation_choices(dl: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
     dl = _paper_scope(dl)
     peak = _peak_dataloader_rows(dl)
-    plat_labels = _platform_labels(_cpu_by_platform(dl))
     zero_skip_loader_decoders = EXPECTED_DATALOADER_DECODERS - EXPECTED_SKIP_DECODERS
 
-    rows: list[list[str]] = []
+    choices_by_platform: list[tuple[str, pd.DataFrame]] = []
     for plat in PAPER_PLATFORMS:
         sub = peak[(peak["platform"] == plat) & (peak["library"].isin(zero_skip_loader_decoders))]
         sub = sub.sort_values(["peak_ips", "library"], ascending=[False, True])
         if len(sub) < 3:
             raise ValueError(f"{plat} has fewer than three zero-skip DataLoader choices")
-        choices = [_format_platform_choice(sub.iloc[i]) for i in range(3)]
+        choices_by_platform.append((plat, sub.head(3).reset_index(drop=True)))
+    return choices_by_platform
+
+
+def _platform_recommendation_rows(dl: pd.DataFrame) -> list[list[str]]:
+    plat_labels = _platform_labels(_cpu_by_platform(_paper_scope(dl)))
+
+    rows: list[list[str]] = []
+    for plat, choices_df in _platform_recommendation_choices(dl):
+        choices = [_format_platform_choice(choices_df.iloc[i]) for i in range(3)]
         rows.append(
             [
                 _latex_escape(plat_labels[plat]),
@@ -451,6 +459,10 @@ def _platform_recommendation_rows(dl: pd.DataFrame) -> list[list[str]]:
             ],
         )
     return rows
+
+
+def _latex_table_row(row: list[str]) -> str:
+    return "    " + " & ".join(row) + r" \\"
 
 
 def generate_platform_recommendation_table(dl: pd.DataFrame, dest: Path) -> None:
@@ -462,7 +474,7 @@ def generate_platform_recommendation_table(dl: pd.DataFrame, dest: Path) -> None
         "Note",
     ]
     rows = _platform_recommendation_rows(dl)
-    body = "\n".join("    " + " & ".join(row) + r" \\" for row in rows)
+    body = "\n".join(_latex_table_row(row) for row in rows)
     header = " & ".join(headers)
     caption = (
         r"  \caption{Per-platform zero-skip DataLoader starting points. Values are measured peak PyTorch "

@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from tools import paper_assets
 from tools._results import load_dataloader_results, load_results
 from tools.paper_assets import (
     EXPECTED_DATALOADER_DECODERS,
@@ -13,6 +14,9 @@ from tools.paper_assets import (
     PAPER_PLATFORMS,
     ROBUSTNESS_DECODERS,
     WORKERS_ORDER,
+    _latex_table_row,
+    _platform_recommendation_choices,
+    _platform_recommendation_rows,
     generate_platform_recommendation_table,
     generate_robustness_table,
     validate_paper_data,
@@ -153,22 +157,88 @@ def test_platform_recommendation_table_has_three_zero_skip_choices_per_platform(
     assert r"\texttt{pyvips}:" not in text
     assert r"\texttt{tensorflow}:" not in text
 
-    expected_choices = [
-        r"\texttt{simplejpeg}: 1754 img/s ($w=8$)",
-        r"\texttt{opencv}: 1707 img/s ($w=8$)",
-        r"\texttt{imagecodecs}: 1677 img/s ($w=8$)",
-        r"\texttt{torchvision}: 1596 img/s ($w=8$)",
-        r"\texttt{imagecodecs}: 1543 img/s ($w=4$)",
-        r"\texttt{simplejpeg}: 1521 img/s ($w=4$)",
-        r"\texttt{torchvision}: 2920 img/s ($w=8$)",
-        r"\texttt{opencv}: 2814 img/s ($w=8$)",
-        r"\texttt{simplejpeg}: 2739 img/s ($w=8$)",
-        r"\texttt{imageio}: 2561 img/s ($w=8$)",
-        r"\texttt{torchvision}: 2557 img/s ($w=8$)",
-        r"\texttt{simplejpeg}: 2421 img/s ($w=8$)",
-        r"\texttt{simplejpeg}: 1557 img/s ($w=8$)",
-        r"\texttt{torchvision}: 1504 img/s ($w=8$)",
-        r"\texttt{imageio}: 1466 img/s ($w=8$)",
-    ]
-    for choice in expected_choices:
-        assert choice in text
+    choices_by_platform = _platform_recommendation_choices(load_dataloader_results(root))
+    assert [platform for platform, _ in choices_by_platform] == list(PAPER_PLATFORMS)
+    for _, choices in choices_by_platform:
+        assert len(choices) == 3
+        assert choices["library"].is_unique
+        assert choices["peak_ips"].tolist() == sorted(choices["peak_ips"], reverse=True)
+        assert choices["peak_workers"].isin(WORKERS_ORDER).all()
+
+
+def test_latex_table_row_formats_cells_with_indentation_and_linebreak() -> None:
+    assert _latex_table_row(["A", "B", "C"]) == r"    A & B & C \\"
+
+
+def test_platform_recommendation_rows_requires_three_zero_skip_choices() -> None:
+    platform = PAPER_PLATFORMS[0]
+    dl = pd.DataFrame(
+        [
+            {
+                "platform": platform,
+                "library": "opencv",
+                "num_workers": 0,
+                "images_per_second": 100.0,
+                "cpu_brand": "Synthetic CPU",
+            },
+            {
+                "platform": platform,
+                "library": "imageio",
+                "num_workers": 2,
+                "images_per_second": 90.0,
+                "cpu_brand": "Synthetic CPU",
+            },
+        ],
+    )
+
+    with pytest.raises(ValueError, match="fewer than three zero-skip DataLoader choices"):
+        _platform_recommendation_rows(dl)
+
+
+def test_platform_recommendation_choices_ignore_skip_decoders(monkeypatch: pytest.MonkeyPatch) -> None:
+    platform = PAPER_PLATFORMS[0]
+    monkeypatch.setattr(paper_assets, "PAPER_PLATFORMS", (platform,))
+    dl = pd.DataFrame(
+        [
+            {
+                "platform": platform,
+                "library": "jpeg4py",
+                "num_workers": 8,
+                "images_per_second": 500.0,
+                "cpu_brand": "Synthetic CPU",
+            },
+            {
+                "platform": platform,
+                "library": "turbojpeg",
+                "num_workers": 8,
+                "images_per_second": 450.0,
+                "cpu_brand": "Synthetic CPU",
+            },
+            {
+                "platform": platform,
+                "library": "opencv",
+                "num_workers": 4,
+                "images_per_second": 300.0,
+                "cpu_brand": "Synthetic CPU",
+            },
+            {
+                "platform": platform,
+                "library": "imageio",
+                "num_workers": 2,
+                "images_per_second": 200.0,
+                "cpu_brand": "Synthetic CPU",
+            },
+            {
+                "platform": platform,
+                "library": "pillow",
+                "num_workers": 0,
+                "images_per_second": 100.0,
+                "cpu_brand": "Synthetic CPU",
+            },
+        ],
+    )
+
+    [(selected_platform, choices)] = _platform_recommendation_choices(dl)
+
+    assert selected_platform == platform
+    assert choices["library"].tolist() == ["opencv", "imageio", "pillow"]
