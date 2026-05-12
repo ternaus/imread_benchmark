@@ -13,6 +13,7 @@ from tools.paper_assets import (
     PAPER_PLATFORMS,
     ROBUSTNESS_DECODERS,
     WORKERS_ORDER,
+    generate_platform_recommendation_table,
     generate_robustness_table,
     validate_paper_data,
 )
@@ -135,3 +136,39 @@ def test_robustness_table_surfaces_only_observed_skip_decoders(tmp_path: Path) -
 
         expected_prefix = "1 / 50,000" if decoder in EXPECTED_SKIP_DECODERS else "0 / 50,000"
         assert expected_prefix in matching_line
+
+
+def test_platform_recommendation_table_has_three_zero_skip_choices_per_platform(tmp_path: Path) -> None:
+    root = _repo_output()
+    dest = tmp_path / "table07_platform_recommendations.tex"
+    generate_platform_recommendation_table(load_dataloader_results(root), dest)
+
+    text = dest.read_text(encoding="utf-8")
+    data_rows = [line for line in text.splitlines() if "GCP \\texttt" in line]
+    assert len(data_rows) == len(PAPER_PLATFORMS)
+    assert all(row.count("img/s") == 3 for row in data_rows)
+
+    for decoder in EXPECTED_SKIP_DECODERS:
+        assert f"\\texttt{{{decoder}}}:" not in text
+    assert r"\texttt{pyvips}:" not in text
+    assert r"\texttt{tensorflow}:" not in text
+
+    expected_choices = [
+        r"\texttt{simplejpeg}: 1754 img/s ($w=8$)",
+        r"\texttt{opencv}: 1707 img/s ($w=8$)",
+        r"\texttt{imagecodecs}: 1677 img/s ($w=8$)",
+        r"\texttt{torchvision}: 1596 img/s ($w=8$)",
+        r"\texttt{imagecodecs}: 1543 img/s ($w=4$)",
+        r"\texttt{simplejpeg}: 1521 img/s ($w=4$)",
+        r"\texttt{torchvision}: 2920 img/s ($w=8$)",
+        r"\texttt{opencv}: 2814 img/s ($w=8$)",
+        r"\texttt{simplejpeg}: 2739 img/s ($w=8$)",
+        r"\texttt{imageio}: 2561 img/s ($w=8$)",
+        r"\texttt{torchvision}: 2557 img/s ($w=8$)",
+        r"\texttt{simplejpeg}: 2421 img/s ($w=8$)",
+        r"\texttt{simplejpeg}: 1557 img/s ($w=8$)",
+        r"\texttt{torchvision}: 1504 img/s ($w=8$)",
+        r"\texttt{imageio}: 1466 img/s ($w=8$)",
+    ]
+    for choice in expected_choices:
+        assert choice in text
