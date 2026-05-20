@@ -69,6 +69,7 @@ def test_decoder_class_contract(name, cls):
 def test_registry_has_known_decoders():
     """Entry-point discovery in pyproject.toml shouldn't silently drop decoders."""
     expected = {
+        "ajpegli",
         "opencv",
         "pillow",
         "skimage",

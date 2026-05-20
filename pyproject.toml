@@ -22,12 +22,13 @@ dependencies = [
 ]
 # Two groups, not thirteen. Real conflicts only exist between these two:
 #   tensorflow vs torch  — numpy/protobuf pin fights
-# Everything else (opencv, skimage, imageio, kornia-rs, simplejpeg, turbojpeg,
-# imagecodecs, pyvips, jpeg4py, torch, torchvision, Pillow) coexists in one venv.
+# Everything else (ajpegli, opencv, skimage, imageio, kornia-rs, simplejpeg,
+# turbojpeg, imagecodecs, pyvips, jpeg4py, torch, torchvision, Pillow) coexists in one venv.
 #
 # Pillow-SIMD WAS a third group (incompatible with mainstream Pillow). Dropped
 # 2026-04 — see docs/gcp_benchmarks.md "Why no Pillow-SIMD?" for rationale.
 optional-dependencies.mainstream = [
+  "ajpegli",
   "imagecodecs",
   "imageio",
   "jpeg4py; sys_platform=='linux'",
@@ -48,6 +49,7 @@ optional-dependencies.mainstream = [
 optional-dependencies.plot = [ "matplotlib>=3.8", "seaborn>=0.13" ]
 optional-dependencies.tensorflow = [ "tensorflow" ]
 scripts.imread-benchmark = "imread_benchmark.cli:app"
+entry-points."imread_benchmark.decoders".ajpegli = "imread_benchmark.decoders.ajpegli_decoder:AJpegliDecoder"
 entry-points."imread_benchmark.decoders".imagecodecs = "imread_benchmark.decoders.imagecodecs_decoder:ImageCodecsDecoder"
 entry-points."imread_benchmark.decoders".imageio = "imread_benchmark.decoders.imageio_decoder:ImageIODecoder"
 entry-points."imread_benchmark.decoders".jpeg4py = "imread_benchmark.decoders.jpeg4py_decoder:Jpeg4pyDecoder"

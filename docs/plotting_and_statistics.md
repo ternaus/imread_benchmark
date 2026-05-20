@@ -118,6 +118,6 @@ throughput.
 - "TensorFlow is always slow."
 - "OpenCV is fastest."
 - "PyVips is broken." Use "unsupported in this fork-based PyTorch DataLoader harness."
-- "Strict libjpeg-turbo wrappers are wrong." Use "they require an explicit CMYK fallback policy."
+- "Strict native JPEG decoders are wrong." Use "they require an explicit fallback policy for uncommon JPEG modes."
 - "Rank 1 beats rank 2" when their uncertainty or practical gap makes them a top tier.
 - Cross-platform absolute throughput comparisons without explaining CPU speed and microarchitecture.

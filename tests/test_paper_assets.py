@@ -65,10 +65,10 @@ def test_paper_data_matrix_matches_claimed_scope() -> None:
     summary = validate_paper_data(load_results(root), load_dataloader_results(root))
 
     assert summary["platforms"] == 5
-    assert summary["single_thread_decoders"] == 12
-    assert summary["dataloader_decoders"] == 10
-    assert summary["single_thread_rows"] == 60
-    assert summary["dataloader_worker_rows"] == 200
+    assert summary["single_thread_decoders"] == 13
+    assert summary["dataloader_decoders"] == 11
+    assert summary["single_thread_rows"] == 65
+    assert summary["dataloader_worker_rows"] == 220
 
 
 def test_validate_paper_data_missing_platform_raises() -> None:

@@ -1,0 +1,125 @@
+{
+  "library": "ajpegli",
+  "benchmark_type": "dataloader",
+  "batch_size": 32,
+  "num_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#17~24.04.1-Ubuntu SMP Fri May  8 07:28:18 UTC 2026",
+    "Machine": "aarch64",
+    "CPU": {
+      "brand_raw": "Neoverse-V2",
+      "arch": "ARM_8",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "ajpegli": "1.0.0"
+  },
+  "worker_results": [
+    {
+      "num_workers": 0,
+      "num_warmup": 1,
+      "images_per_second_mean": 337.17803670826714,
+      "images_per_second_std": 0.09635851932368043,
+      "images_per_second_p50": 337.152652797203,
+      "images_per_second_p90": 337.2758727545173,
+      "images_per_second_p99": 337.3035972449131,
+      "us_per_image_mean": 2965.792468049361,
+      "us_per_image_p50": 2966.015517610354,
+      "us_per_image_p90": 2966.5637002060053,
+      "us_per_image_p99": 2966.6870412900266,
+      "raw_times_s": [
+        148.2978098650001,
+        148.23009237299993,
+        148.33207059200004
+      ],
+      "raw_throughput_ips": [
+        337.152652797203,
+        337.3066777438459,
+        337.07477958375233
+      ]
+    },
+    {
+      "num_workers": 2,
+      "num_warmup": 1,
+      "images_per_second_mean": 633.8903019941181,
+      "images_per_second_std": 0.5335495211347878,
+      "images_per_second_p50": 633.8048328463738,
+      "images_per_second_p90": 634.4268009639374,
+      "images_per_second_p99": 634.5667437903892,
+      "us_per_image_mean": 1577.5611413894949,
+      "us_per_image_p50": 1577.772759335187,
+      "us_per_image_p90": 1578.811286185724,
+      "us_per_image_p99": 1579.0449547270948,
+      "raw_times_s": [
+        78.79041150700004,
+        78.88706019400001,
+        78.95196682400001
+      ],
+      "raw_throughput_ips": [
+        634.5822929933282,
+        633.8048328463738,
+        633.2837801426523
+      ]
+    },
+    {
+      "num_workers": 4,
+      "num_warmup": 1,
+      "images_per_second_mean": 1258.9206679021615,
+      "images_per_second_std": 0.6530444296624627,
+      "images_per_second_p50": 1258.989665265139,
+      "images_per_second_p90": 1259.5449305274076,
+      "images_per_second_p99": 1259.669865211418,
+      "us_per_image_mean": 794.331441688836,
+      "us_per_image_p50": 794.2876955939137,
+      "us_per_image_p90": 794.7428061361231,
+      "us_per_image_p99": 794.8452060081202,
+      "raw_times_s": [
+        39.713590492000094,
+        39.69170843500024,
+        39.742034332
+      ],
+      "raw_throughput_ips": [
+        1258.989665265139,
+        1259.6837468429746,
+        1258.0885915983713
+      ]
+    },
+    {
+      "num_workers": 8,
+      "num_warmup": 1,
+      "images_per_second_mean": 2396.6259315465195,
+      "images_per_second_std": 3.531830395243404,
+      "images_per_second_p50": 2396.544663160484,
+      "images_per_second_p90": 2400.1022000674607,
+      "images_per_second_p99": 2400.9026458715307,
+      "us_per_image_mean": 417.2541732234615,
+      "us_per_image_p50": 417.26741644832646,
+      "us_per_image_p90": 417.8538956979106,
+      "us_per_image_p99": 417.98585352906707,
+      "raw_times_s": [
+        20.824312890999863,
+        20.862953554999876,
+        20.899607774999822
+      ],
+      "raw_throughput_ips": [
+        2400.991584294205,
+        2396.544663160484,
+        2392.3415471848693
+      ]
+    }
+  ],
+  "num_images": 49999,
+  "num_images_total": 50000,
+  "num_images_decoded": 49999,
+  "num_images_skipped": 1,
+  "skip_rate": 2e-05,
+  "skip_indices": [
+    19876
+  ],
+  "skip_examples": [
+    "idx=19876: DecodeError: jpegli decode failed: ./lib/jpegli/color_transform.cc:549: Unsupported color transform 4 -> 2"
+  ],
+  "num_runs": 3
+}

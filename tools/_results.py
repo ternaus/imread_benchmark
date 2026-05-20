@@ -17,6 +17,7 @@ LIBRARY_ORDER: tuple[str, ...] = (
     "turbojpeg",
     "jpeg4py",
     "kornia-rs",
+    "ajpegli",
     "opencv",
     "imagecodecs",
     "pyvips",
