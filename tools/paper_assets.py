@@ -89,8 +89,8 @@ ZEN5_PLATFORM = "linux_AMD-EPYC-9B45"
 WORKERS_ORDER = (0, 2, 4, 8)
 EXPECTED_SINGLE_DECODERS = set(LIBRARY_ORDER)
 EXPECTED_DATALOADER_DECODERS = set(LIBRARY_ORDER) - {"pyvips", "tensorflow"}
-EXPECTED_SKIP_DECODERS = {"jpeg4py", "kornia-rs", "turbojpeg"}
-ROBUSTNESS_DECODERS = ("jpeg4py", "kornia-rs", "turbojpeg", "pyvips", "tensorflow")
+EXPECTED_SKIP_DECODERS = {"ajpegli", "jpeg4py", "kornia-rs", "turbojpeg"}
+ROBUSTNESS_DECODERS = ("ajpegli", "jpeg4py", "kornia-rs", "turbojpeg", "pyvips", "tensorflow")
 
 FIG_DPI = 300
 CLAIM_FIGURE_BASENAMES: tuple[str, ...] = (
@@ -482,7 +482,7 @@ def generate_platform_recommendation_table(dl: pd.DataFrame, dest: Path) -> None
         r"universal recommendation.}"
     )
     note = (
-        r"  {\footnotesize Strict libjpeg-turbo-family wrappers may be fast but skipped one ImageNet JPEG; "
+        r"  {\footnotesize Strict native JPEG decoders/wrappers may be fast but skipped one ImageNet JPEG; "
         r"PyVips and TensorFlow are not PyTorch \texttt{DataLoader} choices in this harness.\par}"
     )
     dest.write_text(
@@ -560,6 +560,7 @@ def _dataloader_eligibility(input_dir: Path, library: str) -> str:
 def generate_robustness_table(input_dir: Path, df_1t: pd.DataFrame, dest: Path) -> None:
     headers = ["Decoder", "DataLoader eligibility", "Skipped images", "Example failure", "Interpretation"]
     interpretations = {
+        "ajpegli": "Fast path, but rejects the same uncommon ImageNet image.",
         "jpeg4py": "Fast path, but needs an explicit CMYK fallback policy.",
         "kornia-rs": "Fast path, but rejects the same uncommon ImageNet image.",
         "turbojpeg": "Fast path, but needs an explicit CMYK fallback policy.",
@@ -680,18 +681,26 @@ def plot_fig02_amd_worker_delta(dl: pd.DataFrame, out_dir: Path, formats: tuple[
     _require_plotting()
     dl = _paper_scope(dl)
     libs = [lib for lib in _ordered_libs_present(dl) if lib not in {"pyvips", "tensorflow"}]
+    delta_by_platform: dict[str, list[float]] = {}
+    for plat in (ZEN4_PLATFORM, ZEN5_PLATFORM):
+        deltas = []
+        for lib in libs:
+            w4 = _ips_at_workers(dl, plat, lib, 4)
+            w8 = _ips_at_workers(dl, plat, lib, 8)
+            deltas.append(np.nan if w4 is None or w4 == 0 or w8 is None else 100.0 * (w8 / w4 - 1.0))
+        delta_by_platform[plat] = deltas
+    finite_deltas = [d for deltas in delta_by_platform.values() for d in deltas if not pd.isna(d)]
+    x_min = min(-18.0, min(finite_deltas) - 5.0)
+    x_max = max(32.0, max(finite_deltas) + 8.0)
+
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.6), sharey=True, constrained_layout=True)
     labels = {ZEN4_PLATFORM: "AMD Zen 4", ZEN5_PLATFORM: "AMD Zen 5"}
     y = np.arange(len(libs))
 
     for ax, plat in zip(axes, (ZEN4_PLATFORM, ZEN5_PLATFORM), strict=True):
-        deltas = []
+        deltas = delta_by_platform[plat]
         colors = []
-        for lib in libs:
-            w4 = _ips_at_workers(dl, plat, lib, 4)
-            w8 = _ips_at_workers(dl, plat, lib, 8)
-            delta = np.nan if w4 is None or w4 == 0 or w8 is None else 100.0 * (w8 / w4 - 1.0)
-            deltas.append(delta)
+        for delta in deltas:
             if pd.isna(delta):
                 colors.append("0.68")
             else:
@@ -707,7 +716,7 @@ def plot_fig02_amd_worker_delta(dl: pd.DataFrame, out_dir: Path, formats: tuple[
         ax.set_title(labels[plat], fontsize=10, fontweight="bold")
         ax.set_xlabel("Throughput change from w=4 to w=8")
         ax.grid(True, axis="x", alpha=0.25)
-        ax.set_xlim(-18, 32)
+        ax.set_xlim(x_min, x_max)
 
     axes[0].set_yticks(y)
     axes[0].set_yticklabels(libs)

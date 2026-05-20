@@ -30,6 +30,32 @@ wheels = [
 ]
 
 [[package]]
+name = "ajpegli"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/d9/9e1ebfed347fa500fe027a19e112f5a252ecf935cfccd6ded0a7e601fbad/ajpegli-1.0.0.tar.gz", hash = "sha256:58e52b7a51f3bf1631d574869c0123c8d525edbd2893cfa44e26759cd784713d", size = 97407485 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/72/39ada8422379778f8d64444b2ffe3f552deebd328b3370391535d7301e36/ajpegli-1.0.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:95341aab9701da44561aab86b938ad7cb9a214b3eaed41893ab52c159f7aaa83", size = 273768 },
+    { url = "https://files.pythonhosted.org/packages/ab/57/1cec79331aeec49a67ea656c78059886cc0a367c514c66bc9195e9e90d40/ajpegli-1.0.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:d8b8f3f21baa47fb539701ffbad50287a4e54c5d7658096bf43f321f0050feae", size = 195503 },
+    { url = "https://files.pythonhosted.org/packages/8d/09/5836b713f16dc1ba90c3b5d09a895d3eaf8c2f0a8b962de5a7697504625e/ajpegli-1.0.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7e6e034a181494d149328c02c07c3e246dac09d6717b45e7d56f9f763e9a8791", size = 285550 },
+    { url = "https://files.pythonhosted.org/packages/2a/90/49e973b99957da3a56b2e485d4b6d68fd9f906f6c47ef42026fd11ed897b/ajpegli-1.0.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9638b916e236900e099528e30cda109cfb26e3a6a58b29734fd9791b6f965fe0", size = 342508 },
+    { url = "https://files.pythonhosted.org/packages/70/10/5bf1eeaf54466f18765518e3da804471cf4488d916fd242c5298397c3bea/ajpegli-1.0.0-cp311-cp311-win_amd64.whl", hash = "sha256:a014c356e2c0bb1684e148d876aecce7909655873d527f0b7531799903b5f6a7", size = 257437 },
+    { url = "https://files.pythonhosted.org/packages/b4/06/a0e3c74972771db6212001c06ab86430bd721c19ecd4b5e6c2b4fd55d1e8/ajpegli-1.0.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:669e1d0e991f6597e816026cf79a1f7c4dc6825f5494d0ed1e5b803255d26df2", size = 277841 },
+    { url = "https://files.pythonhosted.org/packages/d6/4d/a16c18aa5e893be388d15fa6994c5ef2d18ac645d8955d6d973b855560e1/ajpegli-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:3bb23026e4098ad3089a0fc5a15da39816c5e4b8cc18e2601c5177bc7ac7a3ef", size = 197174 },
+    { url = "https://files.pythonhosted.org/packages/cd/e9/994546434e06f82f72d98bf6902ade62241f18c455f2303c2c5a77569cca/ajpegli-1.0.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bc6fc8ae251517fac4a0996194bb65fa884079b23ed8cafb2a928d3fdcb3f333", size = 287717 },
+    { url = "https://files.pythonhosted.org/packages/8b/7a/9c001b02ba80c4de629bc63038929ad898dafe05eb4df5dc7a17d8896b64/ajpegli-1.0.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:66edffabdaf5e84034793db4bbcb4f462aca332244e2a92c6878621481fce245", size = 344521 },
+    { url = "https://files.pythonhosted.org/packages/0b/19/97b491e3c51a39648775393a55196d129153abfa5f62105302b0cef0afe8/ajpegli-1.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:3b9b7b7b3ce9fd042da068d06ba2fb08c64595b2e0aba4420dcf0f49ece12bcd", size = 259641 },
+    { url = "https://files.pythonhosted.org/packages/61/9a/86e0cd693cf77290a587dafd2fc7942eb9384eecf5e196b6c3c9f36f3e83/ajpegli-1.0.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:7681ed14c9cc89a844de21c4feb824f504fca5dad08c89a264429dd35aea4c41", size = 277902 },
+    { url = "https://files.pythonhosted.org/packages/d9/22/f124f98e63da211e0b38dc9d155f8ddd84ffc2c64ddff2b5115456dbd80b/ajpegli-1.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:d51799aa8786128738e864eb7c8770714864eb7840a6061cf6e90e9461f371d3", size = 197259 },
+    { url = "https://files.pythonhosted.org/packages/77/21/b4eb5a4b9a147829a8923d69f8dcd9c15dea972f025276773bae0d26f454/ajpegli-1.0.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:1435aea7cb962eddd6e73206b7b3e49b2e7aa1a0c5daadcb9c8d42cecbf30df1", size = 287732 },
+    { url = "https://files.pythonhosted.org/packages/f2/53/1fa8bb7ce2a01e554bf905ae4fd2bd1ad99d4de33211e01c0401f91ce0a3/ajpegli-1.0.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:797f2deeaf71d43d4aab64eab2cdef93126d3cfdc7fadfdc16c78e01af5cba05", size = 344707 },
+    { url = "https://files.pythonhosted.org/packages/d6/ac/a825b22dcc8e7278773b1dc7c3d8aa0ddb3d04d3bb891176dd464becf4f6/ajpegli-1.0.0-cp313-cp313-win_amd64.whl", hash = "sha256:d78157fb08e5718eb96d5438e28ca90a047d0fc4b0b32d6ca6b0b10a45c13811", size = 259717 },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -592,6 +618,7 @@ dependencies = [
 
 [package.optional-dependencies]
 mainstream = [
+    { name = "ajpegli" },
     { name = "imagecodecs" },
     { name = "imageio" },
     { name = "jpeg4py", marker = "sys_platform == 'linux'" },
@@ -625,6 +652,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ajpegli", marker = "extra == 'mainstream'" },
     { name = "imagecodecs", marker = "extra == 'mainstream'" },
     { name = "imageio", marker = "extra == 'mainstream'" },
     { name = "jpeg4py", marker = "sys_platform == 'linux' and extra == 'mainstream'" },

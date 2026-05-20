@@ -11,6 +11,7 @@
 # Optional:
 #   --zone             GCP zone              (default: us-central1-a)
 #   --machine-type     GCP machine type      (default: c3-standard-8)
+#   --libs             comma-separated decoder names, or all (default: all)
 #   --num-images       images to benchmark   (default: 50000 = full ImageNet val)
 #   --num-runs         single-thread timed runs per library (default: 5)
 #   --dl-runs          DataLoader timed runs per worker config (default: 3)
@@ -32,14 +33,14 @@
 #   ./gcp/run.sh --upload-imagenet ~/imagenet/val --imagenet-bucket gs://my-bucket/imagenet/val
 #
 #   # Smoke test on a new machine type (~10 min, ~$0.10)
-#   ./gcp/run.sh --machine-type c4-standard-16 --smoke \
-#     --imagenet-bucket gs://my-bucket/imagenet/val \
-#     --results-bucket  gs://my-bucket/imread-results --no-wait
+#   ./gcp/run.sh --machine-type c4-standard-16 --smoke --libs ajpegli \
+#     --imagenet-bucket gs://YOUR_BUCKET/imagenet/val \
+#     --results-bucket  gs://YOUR_BUCKET/imread-results --no-wait
 #
 #   # Full run (blocks ~45-90 min depending on machine, fetches results when done)
 #   ./gcp/run.sh \
-#     --imagenet-bucket gs://my-bucket/imagenet/val \
-#     --results-bucket  gs://my-bucket/imread-results
+#     --imagenet-bucket gs://YOUR_BUCKET/imagenet/val \
+#     --results-bucket  gs://YOUR_BUCKET/imread-results
 #
 #   # Fire and forget
 #   ./gcp/run.sh --imagenet-bucket gs://... --results-bucket gs://... --no-wait
@@ -68,6 +69,7 @@ NUM_IMAGES="${NUM_IMAGES:-50000}"
 NUM_RUNS="${NUM_RUNS:-5}"
 DL_RUNS="${DL_RUNS:-3}"
 WORKERS="${WORKERS:-0 2 4 8}"
+LIBS="${LIBS:-all}"
 IMAGENET_BUCKET="${IMAGENET_BUCKET:-}"
 RESULTS_BUCKET="${RESULTS_BUCKET:-}"
 NO_WAIT=false
@@ -84,6 +86,7 @@ while [[ $# -gt 0 ]]; do
         --results-bucket)    RESULTS_BUCKET="$2";       shift 2 ;;
         --zone)              ZONE="$2";                 shift 2 ;;
         --machine-type)      MACHINE_TYPE="$2";         shift 2 ;;
+        --libs)              LIBS="$2";                 shift 2 ;;
         --num-images)        NUM_IMAGES="$2";           shift 2 ;;
         --num-runs)          NUM_RUNS="$2";             shift 2 ;;
         --dl-runs)           DL_RUNS="$2";              shift 2 ;;
@@ -169,6 +172,7 @@ echo "  Run ID       : $RUN_NAME"
 echo "  Machine      : $MACHINE_TYPE  ($ZONE)"
 echo "  ImageNet     : $IMAGENET_BUCKET"
 echo "  Results      : $RUN_GCS"
+echo "  Libraries    : $LIBS"
 echo "  Num images   : $NUM_IMAGES"
 echo "  Single runs  : $NUM_RUNS"
 echo "  DataLoader   : $DL_RUNS runs × workers=[$WORKERS]"
@@ -257,7 +261,7 @@ gcloud compute instances create "$RUN_NAME" \
     --image-project=ubuntu-os-cloud \
     --boot-disk-size=60GB \
     --boot-disk-type="$BOOT_DISK_TYPE" \
-    --metadata="results-bucket=$RUN_GCS,imagenet-bucket=$IMAGENET_BUCKET,num-images=$NUM_IMAGES,num-runs=$NUM_RUNS,dl-runs=$DL_RUNS,workers=$WORKERS,repo-tarball=$RUN_GCS/repo.tar.gz,cache-bucket=$CACHE_BUCKET,force-rebuild=$FORCE_REBUILD,keep-on-failure=$([[ $KEEP_ON_FAILURE == true ]] && echo 1 || echo 0)" \
+    --metadata="results-bucket=$RUN_GCS,imagenet-bucket=$IMAGENET_BUCKET,libs=$LIBS,num-images=$NUM_IMAGES,num-runs=$NUM_RUNS,dl-runs=$DL_RUNS,workers=$WORKERS,repo-tarball=$RUN_GCS/repo.tar.gz,cache-bucket=$CACHE_BUCKET,force-rebuild=$FORCE_REBUILD,keep-on-failure=$([[ $KEEP_ON_FAILURE == true ]] && echo 1 || echo 0)" \
     --metadata-from-file=startup-script="$STARTUP_SCRIPT" \
     --scopes=storage-rw,compute-rw \
     --maintenance-policy=TERMINATE \

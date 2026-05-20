@@ -60,8 +60,8 @@ tarball wins. To force the slow path for testing, rename or delete the tarball.
 
 ```bash
 ./gcp/run.sh \
-  --imagenet-bucket gs://my-bucket/imagenet/val \
-  --results-bucket  gs://my-bucket/imread-results \
+  --imagenet-bucket gs://YOUR_BUCKET/imagenet/val \
+  --results-bucket  gs://YOUR_BUCKET/imread-results \
   --no-wait
 ```
 
@@ -72,19 +72,19 @@ What happens while you sleep:
 
 1. A `c3-standard-8` VM boots on GCP (Intel Sapphire Rapids, 8 vCPU)
 2. Downloads ImageNet from GCS to local disk (~30s within GCP, tarball fast path)
-3. Runs all 11 library benchmarks in memory mode (1-thread + default-thread) — ~15-25 min
-4. Runs all DataLoader benchmarks at 50k images, workers ∈ {0, 2, 4, 8} — ~25-45 min
-5. Uploads results to `gs://my-bucket/imread-results/<run-id>/output/`
+3. Runs all supported library benchmarks in memory mode (1-thread + default-thread) — ~15-25 min
+4. Runs requested DataLoader benchmarks at 50k images, workers ∈ {0, 2, 4, 8} — ~25-45 min
+5. Uploads results to `gs://YOUR_BUCKET/imread-results/<run-id>/output/`
 6. **Deletes itself** — no orphaned VM, no ongoing billing
 
 ### In the morning
 
 ```bash
 # Check if done (exit 0 = object exists)
-gcloud storage objects describe gs://my-bucket/imread-results/<run-id>/DONE
+gcloud storage objects describe gs://YOUR_BUCKET/imread-results/<run-id>/DONE
 
 # Fetch results
-gcloud storage cp --recursive gs://my-bucket/imread-results/<run-id>/output/ ./output/
+gcloud storage cp --recursive gs://YOUR_BUCKET/imread-results/<run-id>/output/ ./output/
 ```
 
 The exact commands are printed by `--no-wait` when you start the run.
@@ -92,7 +92,7 @@ The exact commands are printed by `--no-wait` when you start the run.
 ### Watch the log mid-run (optional)
 
 ```bash
-gcloud storage cat gs://my-bucket/imread-results/<run-id>/startup.log
+gcloud storage cat gs://YOUR_BUCKET/imread-results/<run-id>/startup.log
 ```
 
 This streams the full VM stdout, including per-library progress, without SSH.
@@ -105,12 +105,36 @@ If you want the script to block, download results, and exit all in one command:
 
 ```bash
 ./gcp/run.sh \
-  --imagenet-bucket gs://my-bucket/imagenet/val \
-  --results-bucket  gs://my-bucket/imread-results
+  --imagenet-bucket gs://YOUR_BUCKET/imagenet/val \
+  --results-bucket  gs://YOUR_BUCKET/imread-results
 ```
 
 Progress is printed every 30 seconds. Results land in `./output/` when done.
 Press Ctrl+C at any point — the VM is deleted immediately via a cleanup trap.
+
+### Run one decoder
+
+Use `--libs` when you only need new data for one decoder. For example, to add
+`ajpegli` results without rerunning every library:
+
+```bash
+./gcp/run.sh \
+  --machine-type c4-standard-16 \
+  --smoke \
+  --libs ajpegli \
+  --imagenet-bucket gs://YOUR_BUCKET/imagenet/val \
+  --results-bucket  gs://YOUR_BUCKET/imread-results
+```
+
+For the full paper platform matrix:
+
+```bash
+./gcp/run-many.sh \
+  --machine-types "c4-standard-16 c3d-standard-16 c4d-standard-16 c4a-standard-16 t2a-standard-16" \
+  --libs ajpegli \
+  --imagenet-bucket gs://YOUR_BUCKET/imagenet/val \
+  --results-bucket  gs://YOUR_BUCKET/imread-results
+```
 
 ---
 
@@ -123,6 +147,7 @@ Press Ctrl+C at any point — the VM is deleted immediately via a cleanup trap.
 | `--results-bucket`  | (required)      | GCS bucket for results and logs                                      |
 | `--zone`            | `us-central1-a` | GCP zone                                                             |
 | `--machine-type`    | `c3-standard-8` | VM type (Intel Sapphire Rapids, 8 vCPU, 32 GB)                       |
+| `--libs`            | `all`           | Comma-separated decoder names, or `all`                              |
 | `--num-images`      | `50000`         | Number of images per benchmark run (full ImageNet val)               |
 | `--num-runs`        | `5`             | Single-thread timed runs per library (see [Sample size](#sample-size))|
 | `--dl-runs`         | `3`             | DataLoader timed runs per worker config                              |
@@ -141,7 +166,7 @@ All flags can also be set as environment variables (`IMAGENET_BUCKET`, `RESULTS_
 
 ## Venv cache
 
-Cold installing 11 decoder libraries on the VM takes ~25 minutes. To avoid paying that on
+Cold installing decoder libraries on the VM takes ~25 minutes. To avoid paying that on
 every run, the first run on a given `(os, arch, deps)` combo tars `venvs/` and uploads it
 to `gs://<your-bucket>/imread-cache/`. Subsequent runs pull and extract it in seconds.
 
@@ -280,6 +305,12 @@ ignored `_internal/papers/` workspace:
 
 ```bash
 uv run --extra plot python -m tools.paper_assets --all
+```
+
+For the public arXiv preprint workspace specifically:
+
+```bash
+uv run --extra plot python -m tools.paper_assets --all --paper-dir _internal/papers/arxiv_preprint
 ```
 
 Do not commit `_internal/` outputs. They are local manuscript artifacts; the

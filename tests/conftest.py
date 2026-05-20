@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 # Maps PyPI distribution name → top-level importable module. Drives test
 # skipping for decoders whose third-party library isn't installed in this venv.
 PKG_TO_MODULE = {
+    "ajpegli": "ajpegli",
     "opencv-python-headless": "cv2",
     "pillow": "PIL",
     "scikit-image": "skimage",

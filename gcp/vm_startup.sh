@@ -73,6 +73,7 @@ meta() {
 # ── Read metadata ──────────────────────────────────────────────────────────────
 RESULTS_BUCKET=$(meta results-bucket)
 IMAGENET_BUCKET=$(meta imagenet-bucket)
+LIBS=$(meta libs 2>/dev/null || echo "all")
 NUM_IMAGES=$(meta num-images)
 REPO_TARBALL=$(meta repo-tarball)
 # Optional metadata with sensible defaults so older callers still work.
@@ -137,6 +138,7 @@ echo "  imread benchmark — VM startup"
 echo "  $(date -u)"
 echo "  Results bucket : $RESULTS_BUCKET"
 echo "  ImageNet       : $IMAGENET_BUCKET"
+echo "  Libraries      : $LIBS"
 echo "  Num images     : $NUM_IMAGES"
 echo "  Repo tarball   : $REPO_TARBALL"
 echo "═══════════════════════════════════════════════════"
@@ -365,7 +367,7 @@ echo "[step 5] Done."
 # encoded on the decoder classes themselves, no shell `case` games.
 echo
 echo "[step 6] Running benchmarks..."
-echo "         NUM_IMAGES=$NUM_IMAGES  NUM_RUNS=$NUM_RUNS  DL_RUNS=$DL_RUNS"
+echo "         LIBS=$LIBS  NUM_IMAGES=$NUM_IMAGES  NUM_RUNS=$NUM_RUNS  DL_RUNS=$DL_RUNS"
 echo "         WORKERS=$WORKERS"
 WORKERS_CSV=$(echo "$WORKERS" | tr ' ' ',')
 # Partial-failure policy: per-decoder failures (e.g. turbojpeg crashing on a
@@ -380,7 +382,7 @@ WORKERS_CSV=$(echo "$WORKERS" | tr ' ' ',')
 imread-benchmark run \
     --data-dir "$IMAGENET_DIR" \
     --output-dir output \
-    --libs all \
+    --libs "$LIBS" \
     --mode both \
     --num-images "$NUM_IMAGES" \
     --num-runs "$NUM_RUNS" \

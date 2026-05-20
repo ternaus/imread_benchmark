@@ -1,0 +1,57 @@
+{
+  "library": "ajpegli",
+  "mode": "memory",
+  "run_tag": "1t",
+  "requested_threads": 1,
+  "effective_threads": 1,
+  "system_info": {
+    "Python": "3.12.3",
+    "OS": "Linux",
+    "OS Version": "#17~24.04.1-Ubuntu SMP Thu May  7 15:12:38 UTC 2026",
+    "Machine": "x86_64",
+    "CPU": {
+      "brand_raw": "AMD EPYC 9B45",
+      "arch": "X86_64",
+      "hz_advertised_raw": "Unknown",
+      "count": 16
+    },
+    "ajpegli": "1.0.0"
+  },
+  "benchmark_results": {
+    "images_per_second_mean": 501.40607004730794,
+    "images_per_second_std": 1.4483472687335015,
+    "images_per_second_p50": 501.92741517795105,
+    "images_per_second_p90": 502.8401842340531,
+    "images_per_second_p99": 503.0168942122083,
+    "us_per_image_mean": 1994.408155383107,
+    "us_per_image_p50": 1992.319944598891,
+    "us_per_image_p90": 2001.4822450649003,
+    "us_per_image_p99": 2003.353835268704,
+    "raw_times_s": [
+      99.49145564899999,
+      99.39437228099996,
+      99.91614804,
+      99.61400490999995,
+      100.17608592499994
+    ],
+    "raw_throughput_ips": [
+      502.5456676037944,
+      503.03652865422555,
+      500.4096032603621,
+      501.92741517795105,
+      499.1111355402063
+    ],
+    "num_images_total": 50000,
+    "num_images_decoded": 49999,
+    "num_images_skipped": 1,
+    "skip_rate": 2e-05,
+    "skip_indices": [
+      19876
+    ],
+    "skip_examples": [
+      "idx=19876: DecodeError: jpegli decode failed: ./lib/jpegli/color_transform.cc:549: Unsupported color transform 4 -> 2"
+    ]
+  },
+  "num_images": 50000,
+  "num_runs": 5
+}

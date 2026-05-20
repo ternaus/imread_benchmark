@@ -1,5 +1,5 @@
 {
-  "timestamp_utc": "2026-04-20T04:42:35.048967+00:00",
+  "timestamp_utc": "2026-05-20T06:48:41.391423+00:00",
   "system": "linux_INTEL(R)-XEON(R)-PLATINUM-8581C-CPU-@-2.30GHz",
   "mode": "both",
   "num_images": 50000,
@@ -12,33 +12,11 @@
     8
   ],
   "libs_requested": [
-    "imagecodecs",
-    "imageio",
-    "jpeg4py",
-    "kornia",
-    "opencv",
-    "pillow",
-    "pyvips",
-    "simplejpeg",
-    "skimage",
-    "tensorflow",
-    "torchvision",
-    "turbojpeg"
+    "ajpegli"
   ],
   "libs_skipped_platform": [],
   "libs_run": [
-    "imagecodecs",
-    "imageio",
-    "jpeg4py",
-    "kornia",
-    "opencv",
-    "pillow",
-    "pyvips",
-    "simplejpeg",
-    "skimage",
-    "tensorflow",
-    "torchvision",
-    "turbojpeg"
+    "ajpegli"
   ],
   "failures": [],
   "exit_status": "ok"

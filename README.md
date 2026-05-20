@@ -45,6 +45,7 @@ Pure decode speed with one thread, bytes pre-loaded to memory. **Bold** = best p
 | `turbojpeg` | 640 | 818 | 708 | 426 | 613 |
 | `jpeg4py` | 636 | 760 | 699 | 423 | 611 |
 | `kornia-rs` | 642 | 761 | 664 | 391 | 629 |
+| `ajpegli` | 400 | 501 | 323 | 273 | 337 |
 | `opencv` | 664 | 841 | 721 | 445 | 645 |
 | `imagecodecs` | 677 | 775 | 723 | **457** | 661 |
 | `pyvips` | 420 | 586 | 462 | 261 | 413 |
@@ -68,6 +69,7 @@ Best `images_per_second` across `num_workers ∈ {0, 2, 4, 8}` for each library 
 | `turbojpeg` | 1,535 @ 4w | 2,800 @ 8w | 1,710 @ 8w | 1,347 @ 4w | 2,389 @ 8w |
 | `jpeg4py` | 1,443 @ 4w | 2,453 @ 8w | 1,651 @ 8w | 1,411 @ 8w | 2,312 @ 8w |
 | `kornia-rs` | 1,327 @ 8w | 2,394 @ 8w | 1,422 @ 8w | 1,260 @ 8w | 1,951 @ 8w |
+| `ajpegli` | 1,458 @ 8w | 2,882 @ 8w | 1,498 @ 8w | 1,448 @ 8w | 2,397 @ 8w |
 | `opencv` | 1,457 @ 4w | 2,814 @ 8w | 1,707 @ 8w | 1,419 @ 8w | 2,414 @ 8w |
 | `imagecodecs` | 1,543 @ 4w | 2,476 @ 8w | 1,677 @ 8w | 1,443 @ 8w | 2,242 @ 8w |
 | `pillow` | 1,283 @ 4w | 2,465 @ 8w | 1,565 @ 8w | 1,387 @ 8w | 2,350 @ 8w |
@@ -79,7 +81,7 @@ Best `images_per_second` across `num_workers ∈ {0, 2, 4, 8}` for each library 
 
 <!-- BENCH:metadata:start -->
 
-_**5 platforms** · 50,000 images · 5 runs each · latest run 2026-04-22_
+_**5 platforms** · 50,000 images · 5 runs each · latest run 2026-05-20_
 
 <!-- BENCH:metadata:end -->
 
@@ -93,6 +95,7 @@ Current headline patterns:
 - `torchvision` wins both AMD platforms at peak `DataLoader` throughput and is effectively tied for first on Neoverse V2.
 - `imageio` is not a single-thread leader, but wins peak `DataLoader` throughput on Neoverse V2 in the current GCP runs.
 - OpenCV is rarely the absolute winner, but is consistently close to the local winner and has successful `DataLoader` results on every platform.
+- `ajpegli` has valid single-thread and `DataLoader` results, but skips one uncommon ImageNet JPEG in this matrix, so it is reported as a strict decoder rather than a zero-skip default.
 - PyVips is reported for single-thread decode only; it is skipped in fork-based `DataLoader` benchmarks because of libvips threadpool deadlocks in this harness.
 
 ## GitAds Sponsored
@@ -219,6 +222,8 @@ output/
 
 ### Comprehensive codec libraries
 
+- **ajpegli** — Python wrapper for Google's JPEGli decoder; supports both
+  path-based reads and in-memory byte decoding.
 - **imagecodecs** — uses libjpeg-turbo 3.x; prebuilt ARM64 wheels
 - **pyvips** — libvips bindings (bundled in wheels). Single-thread only;
   the libvips threadpool deadlocks under fork-based PyTorch DataLoader,
@@ -254,7 +259,7 @@ output/
 - Use the DataLoader benchmark for final decoder and `num_workers` selection.
 - Start with OpenCV when you need a robust default that runs everywhere.
 - Try `torchvision` when your pipeline already wants tensors and you can benchmark the target CPU.
-- Try `simplejpeg` / `turbojpeg` / `jpeg4py` when maximum libjpeg-turbo-backed speed matters and your dataset policy handles uncommon JPEG modes.
+- Try lower-level native decoders such as `simplejpeg`, `turbojpeg`, `jpeg4py`, `kornia-rs`, or `ajpegli` when maximum decode speed matters and your dataset policy handles uncommon JPEG modes.
 
 ### Choosing for pure decode speed
 
