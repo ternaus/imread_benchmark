@@ -1,299 +1,294 @@
 # imread-benchmark
 
-## Overview
+`imread-benchmark` is a reproducible framework for measuring JPEG decoder and
+PyTorch `DataLoader` supply throughput. It is built around immutable dataset
+packages, deterministic experiment plans, fresh-process runs, and validated
+schema-2 evidence bundles.
 
-`imread-benchmark` is a reproducible benchmark framework for JPEG decoding in Python ML pipelines. It provides:
-
-- an installable `imread-benchmark` CLI for local datasets,
-- isolated per-library worker environments so conflicting stacks can be benchmarked in one run,
-- PyTorch `DataLoader` throughput measurements in addition to single-thread decoder speed,
-- Google Cloud runners for repeatable cloud CPU comparisons, and
-- JSON outputs plus generated plots/tables for README, docs, and publication-ready analysis.
-
-The default benchmark uses the ImageNet validation set and reports RGB `uint8` decode throughput across common Python libraries and CPU families.
+The repository no longer ships historical result JSON or a second execution
+path. New paper tables and figures must be generated from committed schema-2
+bundles through the canonical publication layer.
 
 Preprint: [Single-Thread JPEG Decoder Benchmarks Mis-Evaluate ML Data Loaders](https://arxiv.org/abs/2605.08731).
 
-## Results
+## What is measured
 
-The plots and tables below are generated from `output/<platform>/*.json`. To refresh after a new run:
+Two protocols are currently supported:
 
-```bash
-imread-benchmark plot --input output --output docs/assets/benchmarks
-imread-benchmark render-readme
-```
+- `decode-memory`: decode already-resident JPEG bytes into a fully materialized,
+  C-contiguous `(H, W, 3)` RGB `uint8` NumPy array;
+- `loader-supply`: traverse a real PyTorch `DataLoader` over resident JPEG
+  bytes, including worker scheduling, batching, queues, and delivery to the
+  consumer process.
 
-The figures below are claim-first summaries: full numeric matrices remain in the tables.
+Neither protocol measures storage download, archive verification, model
+training, GPU transfer, or augmentation. Claims about epoch time require a
+separate end-to-end experiment.
 
-![Protocol changes decoder recommendations](docs/assets/benchmarks/fig01_protocol_rank_change.png)
+Every timed configuration runs in a fresh subprocess. Validation and warmup
+are outside the timer. Pillow explicitly materializes the image, converts to
+RGB, and copies it into an owned NumPy array before returning.
 
-![Worker-count scaling differs between AMD generations](docs/assets/benchmarks/fig02_amd_worker_delta.png)
+## Evidence model
 
-![TensorFlow JPEG decode shows a large ARM penalty](docs/assets/benchmarks/fig03_tensorflow_arm_penalty.png)
+A benchmark campaign pins:
 
-![Near-optimality and platform range for operational decoder choice](docs/assets/benchmarks/fig04_decoder_recommendation_summary.png)
+- exact JPEG bytes through `package_id`, `manifest_id`, and ordered item IDs;
+- a pre-timing operational or common support set;
+- decoder threads, DataLoader workers, batch size, prefetch, persistence, and
+  multiprocessing start method;
+- lock-backed environment and stable platform descriptors;
+- source revision, randomized repetition block, and run position.
 
-### Single-thread decode throughput (img/s)
+Each completed run is an immutable directory containing raw samples, phase
+events, runtime worker probes, full provenance, derived statistics, payload
+hashes, and a final `COMMITTED.json`. A result is invisible until the marker
+and every checksum validate.
 
-Pure decode speed with one thread, bytes pre-loaded to memory. **Bold** = best per platform.
+## Recommended paper workloads
 
-<!-- BENCH:single_thread:start -->
+The primary strengthening campaign uses selected scenes from the Forchheim
+Image Database (FODB):
 
-| Library | AMD EPYC 9B14 | AMD EPYC 9B45 | Intel Xeon Platinum 8581C | Neoverse-N1 | Neoverse-V2 |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| `simplejpeg` | **690** | 857 | **735** | 456 | **662** |
-| `turbojpeg` | 640 | 818 | 708 | 426 | 613 |
-| `jpeg4py` | 636 | 760 | 699 | 423 | 611 |
-| `kornia-rs` | 642 | 761 | 664 | 391 | 629 |
-| `ajpegli` | 400 | 501 | 323 | 273 | 337 |
-| `opencv` | 664 | 841 | 721 | 445 | 645 |
-| `imagecodecs` | 677 | 775 | 723 | **457** | 661 |
-| `pyvips` | 420 | 586 | 462 | 261 | 413 |
-| `pillow` | 537 | 726 | 577 | 360 | 551 |
-| `skimage` | 475 | 661 | 525 | 326 | 499 |
-| `imageio` | 496 | 599 | 524 | 335 | 506 |
-| `torchvision` | 621 | **864** | 712 | 440 | 643 |
-| `tensorflow` | 596 | 836 | 689 | 268 | 391 |
+- `fodb-native`: original camera JPEGs, providing the large-resolution regime;
+- `fodb-mixed`: the same matched scenes and devices after Facebook, Instagram,
+  Telegram, Twitter, and WhatsApp processing, providing a realistic mixture of
+  resolutions, quantization tables, compression ratios, and metadata.
 
-<!-- BENCH:single_thread:end -->
+These are workload comparisons, not a causal estimate of resolution or JPEG
+quality. Encoder quality is generally unavailable; `quality_estimate` is only
+an estimator derived from quantization tables. See
+[Experiment design](docs/experiment_design.md) for the core matrix and the
+controlled resolution × quality ablation needed for a causal mechanism claim.
+The ablation builder and exact interpretation rules are documented in
+[Controlled resolution and JPEG-quality ablation](docs/controlled_ablation.md).
 
-### Peak DataLoader throughput (img/s)
+## Setup
 
-Best `images_per_second` across `num_workers ∈ {0, 2, 4, 8}` for each library × platform, using a PyTorch DataLoader with `batch_size=32`. Cell format: `img/s @ Nw`. **Bold** = best per platform.
-
-<!-- BENCH:dataloader:start -->
-
-| Library | AMD EPYC 9B14 | AMD EPYC 9B45 | Intel Xeon Platinum 8581C | Neoverse-N1 | Neoverse-V2 |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| `simplejpeg` | 1,521 @ 4w | 2,739 @ 8w | **1,754 @ 8w** | **1,557 @ 8w** | 2,421 @ 8w |
-| `turbojpeg` | 1,535 @ 4w | 2,800 @ 8w | 1,710 @ 8w | 1,347 @ 4w | 2,389 @ 8w |
-| `jpeg4py` | 1,443 @ 4w | 2,453 @ 8w | 1,651 @ 8w | 1,411 @ 8w | 2,312 @ 8w |
-| `kornia-rs` | 1,327 @ 8w | 2,394 @ 8w | 1,422 @ 8w | 1,260 @ 8w | 1,951 @ 8w |
-| `ajpegli` | 1,458 @ 8w | 2,882 @ 8w | 1,498 @ 8w | 1,448 @ 8w | 2,397 @ 8w |
-| `opencv` | 1,457 @ 4w | 2,814 @ 8w | 1,707 @ 8w | 1,419 @ 8w | 2,414 @ 8w |
-| `imagecodecs` | 1,543 @ 4w | 2,476 @ 8w | 1,677 @ 8w | 1,443 @ 8w | 2,242 @ 8w |
-| `pillow` | 1,283 @ 4w | 2,465 @ 8w | 1,565 @ 8w | 1,387 @ 8w | 2,350 @ 8w |
-| `skimage` | 1,238 @ 4w | 2,536 @ 8w | 1,615 @ 8w | 1,388 @ 8w | 2,315 @ 8w |
-| `imageio` | 1,273 @ 4w | 2,324 @ 8w | 1,643 @ 8w | 1,466 @ 8w | **2,561 @ 8w** |
-| `torchvision` | **1,596 @ 8w** | **2,920 @ 8w** | 1,612 @ 4w | 1,504 @ 8w | 2,557 @ 8w |
-
-<!-- BENCH:dataloader:end -->
-
-<!-- BENCH:metadata:start -->
-
-_**5 platforms** · 50,000 images · 5 runs each · latest run 2026-05-20_
-
-<!-- BENCH:metadata:end -->
-
-### What the results mean
-
-Single-thread decoder speed is useful, but it is not enough to choose a decoder for a training pipeline. The peak `DataLoader` table is usually the better operational signal because it captures multiprocessing worker behavior, library fork-safety, and CPU-specific scaling.
-
-Current headline patterns:
-
-- `simplejpeg` is a strong single-thread baseline and wins peak `DataLoader` throughput on Intel Emerald Rapids and Neoverse N1.
-- `torchvision` wins both AMD platforms at peak `DataLoader` throughput and is effectively tied for first on Neoverse V2.
-- `imageio` is not a single-thread leader, but wins peak `DataLoader` throughput on Neoverse V2 in the current GCP runs.
-- OpenCV is rarely the absolute winner, but is consistently close to the local winner and has successful `DataLoader` results on every platform.
-- `ajpegli` has valid single-thread and `DataLoader` results, but skips one uncommon ImageNet JPEG in this matrix, so it is reported as a strict decoder rather than a zero-skip default.
-- PyVips is reported for single-thread decode only; it is skipped in fork-based `DataLoader` benchmarks because of libvips threadpool deadlocks in this harness.
-
-## GitAds Sponsored
-
-[Sponsored by GitAds](https://gitads.dev/v1/ad-track?source=ternaus/imread_benchmark@github)
-
-## Important Note on Image Conversion
-
-All decoders output `(H, W, 3)` uint8 RGB numpy arrays for a fair comparison. Libraries that default to other formats (OpenCV → BGR, torchvision → CHW tensor, TensorFlow → EagerTensor) include a conversion step. Note that in real ML pipelines the conversion is often unnecessary.
-
-## Benchmark Modes
-
-**Memory mode** (default): images are pre-loaded as bytes before the timed loop. This measures pure decode throughput with no disk I/O.
-
-**Disk mode**: each decode call reads the file from disk. Includes I/O latency.
-
-## Dataset
-
-[ImageNet validation set](https://image-net.org) — 50,000 JPEG images, ~500×400px.
+Install [`uv`](https://docs.astral.sh/uv/) and sync the locked development
+environment:
 
 ```bash
-# Download
-wget https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar
-mkdir -p imagenet/val
-tar -xf ILSVRC2012_img_val.tar -C imagenet/val
+uv sync --frozen --group dev --extra mainstream
+uv run pytest -q
 ```
 
-## System Requirements
+List decoder capability contracts:
 
 ```bash
-# macOS only: required by PyTurboJPEG (pure-python ctypes binding)
-brew install jpeg-turbo
+uv run imread-benchmark list-decoders
 ```
 
-`pyvips` ships its own bundled libvips via the `pyvips-binary` PyPI wheel,
-so no `brew install vips` is needed. `simplejpeg` wheels bundle libjpeg-turbo.
-On Linux you'll still need `apt install libjpeg-turbo8-dev libturbojpeg0`
-(see `gcp/vm_startup.sh`), since `jpeg4py` is built from sdist.
+## Prepare FODB once
 
-## Installation
+After downloading the FODB ZIP parts, build the selected native and mixed
+workloads. The builder extracts only selected complete scenes, verifies ZIP
+CRC values, records JPEG descriptors, hard-links the two local views, and
+creates one deduplicated uncompressed tar package.
 
 ```bash
-# Install uv if needed
-pip install uv
-
-# Install the lightweight orchestrator (control plane).
-uv venv && source .venv/bin/activate
-uv pip install -e .
+uv run imread-benchmark dataset fodb-package \
+  --archive ~/data/fodb-part01.zip \
+  --archive ~/data/fodb-part02.zip \
+  --archive ~/data/fodb-part03.zip \
+  --output-root ~/data/fodb-benchmark \
+  --scene-count 12 \
+  --seed 20260729
 ```
 
-The benchmark CLI creates decoder worker environments automatically under
-`venvs/<group>/` when `imread-benchmark run` needs them. Today the groups are
-`mainstream` and `tensorflow`; they are separate because TensorFlow and
-PyTorch-oriented packages can have incompatible NumPy/protobuf constraints.
-The first full run pays the dependency installation cost, and later runs reuse
-the populated worker environments. Use `--skip-setup` only when those worker
-environments already exist and should not be modified.
-
-Plotting is separate from benchmark execution. Install the plotting extra only
-if you want to regenerate figures:
+Upload the returned descriptor to a private GCS prefix:
 
 ```bash
-uv pip install -e '.[plot]'
+uv run imread-benchmark dataset publish \
+  ~/data/fodb-benchmark/packages/<package-id>/package.json \
+  --store gs://YOUR_BUCKET/imread \
+  --prefix datasets
 ```
 
-## Running the Benchmark
+The command returns the remote descriptor object key used by local and cloud
+materializers. Dataset redistribution rights are not implied; keep the bucket
+private and follow FODB's terms.
+
+## Build the controlled resolution-quality package
+
+For the separate causal ablation, start from a pinned lossless PNG source set
+and generate every matched factor cell with one command:
 
 ```bash
-# What would run on this machine?
-imread-benchmark list-libs
-
-# Single + DataLoader for every supported decoder, default 50k images
-imread-benchmark run --data-dir /path/to/imagenet/val
-
-# Faster smoke run
-imread-benchmark run --data-dir /path/to/imagenet/val \
-    --num-images 2000 --num-runs 5 --dataloader-runs 2 \
-    --workers 0,2
-
-# Just one library, single-thread benchmark only
-imread-benchmark run --data-dir /path/to/imagenet/val \
-    --libs opencv --mode single
-
-# Generate README plots from output/ JSONs
-imread-benchmark plot --input output --output docs/assets/benchmarks
+uv run imread-benchmark dataset controlled-package \
+  --source-dir /data/pinned-lossless-png \
+  --output-root /data/controlled-jpeg \
+  --source-name SOURCE_DATASET_NAME \
+  --source-release SOURCE_DATASET_RELEASE \
+  --source-license SOURCE_DATASET_LICENSE \
+  --long-edge 512 --long-edge 1024 --long-edge 2048 \
+  --quality 50 --quality 75 --quality 90 --quality 95 \
+  --include-native \
+  --subsampling 4:2:0 \
+  --compressed-byte-limit 2147483648
 ```
 
-The CLI sets up `venvs/<group>/` for each dependency group it needs. Subsequent runs reuse those venvs, so only the first invocation pays the install cost.
+This produces 16 workloads with identical source membership and order. Use
+[`examples/controlled-ablation.template.yaml`](examples/controlled-ablation.template.yaml)
+once per workload; do not interpret FODB's naturally confounded size/quality
+mixture as this controlled effect.
 
-## Running on Google Cloud
+## Validate a plan before spending money
 
-Spin up a benchmark VM on GCP, run everything against ImageNet from a GCS bucket, and have it self-delete when done:
+An experiment plan is schema 2 YAML and must pin the IDs printed in
+`package.json`. Example protocol profiles:
+
+```yaml
+matrix:
+  decoders:
+    pillow: {threads: [default]}
+    opencv: {threads: [default, 1]}
+    simplejpeg: {threads: [default]}
+    torchvision: {threads: [default, 1]}
+  protocols:
+    decode-memory: {}
+    loader-supply:
+      worker_profiles:
+        - workers: [0]
+          batch_size: 1
+        - workers: [2, 4, 8]
+          batch_size: 1
+          prefetch_factor: 1
+          persistent_workers: true
+          multiprocessing_start_method: spawn
+execution:
+  per_run_subprocess: true
+  run_timeout_seconds: 3600
+  checkpoint_each_run: true
+  maximum_memory_fraction: 0.6
+```
+
+Validate and materialize the deterministic randomized matrix:
+
+```bash
+uv run imread-benchmark plan validate experiment.yaml \
+  --package-descriptor /data/packages/<package-id>/package.json
+
+uv run imread-benchmark plan expand experiment.yaml \
+  --package-descriptor /data/packages/<package-id>/package.json \
+  --output expanded-plan.json
+```
+
+The complete five-block FODB matrix is available as
+[`examples/fodb-experiment.template.yaml`](examples/fodb-experiment.template.yaml).
+Instantiate it separately for `fodb-native` and `fodb-mixed`.
+
+## Run locally
+
+Capture platform provenance and provision the frozen worker environment:
+
+```bash
+REVISION=$(git rev-parse HEAD)
+
+uv run imread-benchmark platform capture \
+  --output artifacts/platform.json \
+  --machine-type local \
+  --location local
+
+uv run imread-benchmark environment provision \
+  --group mainstream \
+  --runner-revision "$REVISION" \
+  --project-root . \
+  --cache-root .cache/environments
+```
+
+Then pass the emitted environment descriptor and Python path to the campaign:
+
+```bash
+<environment-python> -m imread_benchmark.cli campaign run experiment.yaml \
+  --package-descriptor /data/packages/<package-id>/package.json \
+  --environment-descriptor <environment.json> \
+  --platform-descriptor artifacts/platform.json \
+  --artifact-root artifacts \
+  --attempts-root attempts \
+  --runner-revision "$REVISION" \
+  --worker-python <environment-python>
+```
+
+## Run on GCP
+
+The launcher uploads a content-addressed source snapshot and plan, creates an
+ephemeral VM, materializes the dataset from one sequential GCS object, restores
+or builds a content-addressed frozen environment, and checkpoints every completed bundle. `DONE`
+or `FAILED` is written last; the VM then deletes itself unless failure retention
+was explicitly requested.
 
 ```bash
 ./gcp/run.sh \
-    --imagenet-bucket gs://my-bucket/imagenet/val \
-    --results-bucket  gs://my-bucket/imread-results \
-    --no-wait
+  --plan experiment.yaml \
+  --dataset-store gs://YOUR_BUCKET/imread \
+  --dataset-descriptor datasets/<package-id>/package.json \
+  --results-store gs://YOUR_BUCKET/imread-results \
+  --environment-store gs://YOUR_BUCKET/imread-cache \
+  --machine-type c3-standard-16 \
+  --groups mainstream \
+  --no-wait
 ```
 
-Built venvs are cached in GCS (keyed by `sha256(uv.lock)`), so reruns on the same machine type skip the ~25-minute install. Use `--force-rebuild` to re-resolve PyPI without editing `uv.lock`. Full details, machine-type matrix, cost, and cache semantics: [docs/gcp_benchmarks.md](docs/gcp_benchmarks.md).
+Starting another VM with the same source, plan, package, environment, and
+platform pulls valid committed bundles first and launches only missing runs.
+See [GCP campaigns](docs/gcp_benchmarks.md).
 
-## Results Structure
-
-```
-output/
-└── linux_AMD-EPYC-9B45/
-    ├── opencv_1t_results.json
-    ├── opencv_default_results.json
-    ├── opencv_dataloader_results.json
-    ├── run_summary.json
-    └── ...
-```
-
-## Libraries Benchmarked
-
-### Direct libjpeg-turbo (fastest)
-
-- **simplejpeg** — CFFI binding; zero-copy decode from bytes
-- **turbojpeg** (PyTurboJPEG) — Python binding for libjpeg-turbo
-- **jpeg4py** — direct libjpeg-turbo binding (**Linux only**)
-- **kornia-rs** — Rust implementation using libjpeg-turbo
-- **OpenCV** (opencv-python-headless)
-
-### Comprehensive codec libraries
-
-- **ajpegli** — Python wrapper for Google's JPEGli decoder; supports both
-  path-based reads and in-memory byte decoding.
-- **imagecodecs** — uses libjpeg-turbo 3.x; prebuilt ARM64 wheels
-- **pyvips** — libvips bindings (bundled in wheels). Single-thread only;
-  the libvips threadpool deadlocks under fork-based PyTorch DataLoader,
-  so dataloader benchmarks are skipped on every platform.
-
-### Standard libjpeg
-
-- **Pillow**
-- **scikit-image**
-- **imageio**
-
-> **Note:** Pillow-SIMD was previously included but dropped 2026-04 —
-> upstream is abandoned (last release 2023-05), no Linux wheels, and its
-> historical SIMD speedup is now matched by `jpeg4py` / `simplejpeg` /
-> `kornia-rs`. Full rationale in
-> [`docs/gcp_benchmarks.md`](docs/gcp_benchmarks.md#why-no-pillow-simd).
-
-### ML framework components
-
-- **torchvision**
-- **tensorflow**
-
-## Performance Considerations
-
-- All benchmarks run single-threaded unless using the DataLoader benchmark
-- Memory mode is the recommended baseline — it isolates decode speed from storage
-- Results based on ImageNet JPEG images (~500×400px)
-
-## Recommendations
-
-### Choosing for ML training
-
-- Use the DataLoader benchmark for final decoder and `num_workers` selection.
-- Start with OpenCV when you need a robust default that runs everywhere.
-- Try `torchvision` when your pipeline already wants tensors and you can benchmark the target CPU.
-- Try lower-level native decoders such as `simplejpeg`, `turbojpeg`, `jpeg4py`, `kornia-rs`, or `ajpegli` when maximum decode speed matters and your dataset policy handles uncommon JPEG modes.
-
-### Choosing for pure decode speed
-
-- Use the single-thread table to compare isolated decoder implementations.
-- Re-run locally if your images differ substantially from ImageNet validation JPEGs.
-
-### Choosing for feature-rich applications
-
-- `opencv` remains the best choice when you need more than just JPEG decoding
-
-## Development
+## Validate and publish
 
 ```bash
-# Run tests
-uv run pytest tests/ -v
+uv run imread-benchmark artifacts validate artifacts
 
-# Run linters
+uv run imread-benchmark publish publication.yaml \
+  --artifact-root artifacts \
+  --output-dir generated
+
+uv run imread-benchmark publish publication.yaml \
+  --artifact-root artifacts \
+  --output-dir generated \
+  --check
+```
+
+Publication output includes raw sample values, repetition-level configuration
+groups, and a provenance sidecar with all bundle IDs, filters, claim scope,
+generator revision, and output hash.
+Training claims are rejected for decoder-only or loader-only evidence.
+
+## Project structure
+
+```text
+imread_benchmark/
+  datasets/       package building, FODB selection, GCS materialization
+  environments/   descriptor, frozen provisioner, remote tar.zst cache
+  plans/          schema-2 plan loading and deterministic expansion
+  support/        pre-timing support audits and pinned intersections
+  execution/      campaign coordinator, one-run workers, attempts
+  artifacts/      atomic bundles and remote commit protocol
+  analysis/       canonical loader, statistics, claim gate, publication
+  decoders/       entry-point adapters and capability contracts
+```
+
+## Contributing
+
+Run the complete local gate before submitting changes:
+
+```bash
+uv run pytest -q
 uv run pre-commit run --all-files
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add a new decoder.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for decoder adapter requirements.
 
 ## Citation
 
-If you found this benchmark useful in your research or engineering work, please cite the preprint:
-
 ```bibtex
 @misc{iglovikov2026singlethreadjpegdecoderbenchmarks,
-      title={Single-Thread JPEG Decoder Benchmarks Mis-Evaluate ML Data Loaders},
-      author={Vladimir Iglovikov},
-      year={2026},
-      eprint={2605.08731},
-      archivePrefix={arXiv},
-      primaryClass={cs.PF},
-      url={https://arxiv.org/abs/2605.08731},
+  title={Single-Thread JPEG Decoder Benchmarks Mis-Evaluate ML Data Loaders},
+  author={Vladimir Iglovikov},
+  year={2026},
+  eprint={2605.08731},
+  archivePrefix={arXiv},
+  primaryClass={cs.PF},
+  url={https://arxiv.org/abs/2605.08731}
 }
 ```

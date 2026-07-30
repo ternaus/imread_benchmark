@@ -1,0 +1,8 @@
+schema_version: "2.0"
+claim_scope: loader-supply
+filters:
+  config.protocol_id: loader-supply
+  dataset.workload_id: WORKLOAD_ID
+statistic: images_per_second
+practical_margin_percent: 5
+generator_revision: "0000000000000000000000000000000000000000"

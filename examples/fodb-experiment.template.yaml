@@ -1,0 +1,49 @@
+schema_version: "2.0"
+experiment_name: fodb-WORKLOAD-PLATFORM
+seed: 20260729
+repetitions: 5
+dataset:
+  descriptor: /data/datasets/PACKAGE_ID/package.json
+  package_id: PACKAGE_ID
+  workload_id: WORKLOAD_ID
+  manifest_id: MANIFEST_ID
+  selection:
+    method: all
+    expected_items: ITEM_COUNT
+  logical_repeat_factor: 1
+matrix:
+  decoders:
+    ajpegli: {threads: [default]}
+    imagecodecs: {threads: [default]}
+    imageio: {threads: [default]}
+    jpeg4py: {threads: [default]}
+    kornia: {threads: [default]}
+    opencv: {threads: [default, 1]}
+    pillow: {threads: [default]}
+    pyvips: {threads: [default, 1]}
+    simplejpeg: {threads: [default]}
+    skimage: {threads: [default]}
+    torchvision: {threads: [default, 1]}
+    turbojpeg: {threads: [default]}
+  protocols:
+    decode-memory: {}
+    loader-supply:
+      worker_profiles:
+        - workers: [0]
+          batch_size: 1
+        - workers: [2, 4, 8]
+          batch_size: 1
+          prefetch_factor: 1
+          persistent_workers: true
+          multiprocessing_start_method: spawn
+measurement:
+  warmup_passes: 1
+  timed_passes_per_run: 1
+  minimum_timed_seconds: 1.0
+  output_contract: normalized-rgb
+  support_policy: common
+execution:
+  per_run_subprocess: true
+  run_timeout_seconds: 3600
+  checkpoint_each_run: true
+  maximum_memory_fraction: 0.6

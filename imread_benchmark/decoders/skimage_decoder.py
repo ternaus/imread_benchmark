@@ -12,11 +12,11 @@ class SkimageDecoder(BaseDecoder):
     def decode(self, data: bytes) -> np.ndarray:
         import io
 
-        import skimage.io
+        from skimage.io import imread
 
-        return skimage.io.imread(io.BytesIO(data))
+        return imread(io.BytesIO(data))
 
     def decode_path(self, path: str) -> np.ndarray:
-        import skimage.io
+        from skimage.io import imread
 
-        return skimage.io.imread(path)
+        return imread(path)

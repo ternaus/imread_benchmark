@@ -1,357 +1,178 @@
 #!/usr/bin/env bash
-# gcp/run.sh — Launch a GCP VM, run imread benchmarks, fetch results, terminate VM.
-#
-# Usage:
-#   ./gcp/run.sh [options]
-#
-# Required (or set as env vars):
-#   --imagenet-bucket  gs://bucket/path/to/imagenet/val   (or IMAGENET_BUCKET)
-#   --results-bucket   gs://bucket/imread-results          (or RESULTS_BUCKET)
-#
-# Optional:
-#   --zone             GCP zone              (default: us-central1-a)
-#   --machine-type     GCP machine type      (default: c3-standard-8)
-#   --libs             comma-separated decoder names, or all (default: all)
-#   --num-images       images to benchmark   (default: 50000 = full ImageNet val)
-#   --num-runs         single-thread timed runs per library (default: 5)
-#   --dl-runs          DataLoader timed runs per worker config (default: 3)
-#   --workers          DataLoader worker counts to test       (default: "0 2 4 8")
-#   --smoke            short validation run on a new machine type
-#                      (forces num-images=2000, num-runs=3, dl-runs=2, workers="0 2 8")
-#   --no-wait          fire-and-forget; skip polling + fetch
-#   --no-cache         disable venv caching for this run (cold install on the VM)
-#   --force-rebuild    bypass cache LOOKUP and reupload a fresh tarball.
-#                      Use to re-resolve PyPI without editing uv.lock — picks up
-#                      newly released wheel versions of every cached library.
-#   --keep-on-failure  keep the VM alive on ERR (instead of self-deleting) so
-#                      you can SSH in and triage. Default: self-delete on any
-#                      failure to avoid surprise billing on a stuck VM.
-#   --upload-imagenet  path/to/local/imagenet/val   one-time upload to --imagenet-bucket, then exit
-#
-# Examples:
-#   # One-time: upload ImageNet to GCS
-#   ./gcp/run.sh --upload-imagenet ~/imagenet/val --imagenet-bucket gs://my-bucket/imagenet/val
-#
-#   # Smoke test on a new machine type (~10 min, ~$0.10)
-#   ./gcp/run.sh --machine-type c4-standard-16 --smoke --libs ajpegli \
-#     --imagenet-bucket gs://YOUR_BUCKET/imagenet/val \
-#     --results-bucket  gs://YOUR_BUCKET/imread-results --no-wait
-#
-#   # Full run (blocks ~45-90 min depending on machine, fetches results when done)
-#   ./gcp/run.sh \
-#     --imagenet-bucket gs://YOUR_BUCKET/imagenet/val \
-#     --results-bucket  gs://YOUR_BUCKET/imread-results
-#
-#   # Fire and forget
-#   ./gcp/run.sh --imagenet-bucket gs://... --results-bucket gs://... --no-wait
+# Launch one ephemeral GCP worker for a schema-2 benchmark campaign.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# ── Defaults ──────────────────────────────────────────────────────────────────
-ZONE="${ZONE:-us-central1-a}"
-MACHINE_TYPE="${MACHINE_TYPE:-c3-standard-8}"
-# Statistics rationale (see docs/gcp_benchmarks.md "Sample size"):
-#   N=50000   → full ImageNet val. No sampling story to defend in the paper.
-#   NUM_RUNS=5  → enough for stable mean ± std. Per-image variance of decode
-#                 time + N=50k already drives SE_mean below 0.1%, which is
-#                 way below the 2x–100x effect sizes we actually compare.
-#                 Going from 20 to 5 is a 4x wallclock reduction with zero
-#                 paper-visible loss (we drop the per-run percentile columns).
-#   DL_RUNS=3   → DataLoader runs are dominated by worker startup variance;
-#                 5+ reps don't help the signal.
-#   WORKERS     → dropped 1 (in-torch single-process is what 0 already
-#                 measures; 0-vs-1 distinction is a torch impl detail nobody
-#                 plots). Kept 0 (no-fork), 2 (fork sanity), 4, 8 (scaling).
-NUM_IMAGES="${NUM_IMAGES:-50000}"
-NUM_RUNS="${NUM_RUNS:-5}"
-DL_RUNS="${DL_RUNS:-3}"
-WORKERS="${WORKERS:-0 2 4 8}"
-LIBS="${LIBS:-all}"
-IMAGENET_BUCKET="${IMAGENET_BUCKET:-}"
-RESULTS_BUCKET="${RESULTS_BUCKET:-}"
+ZONE="${ZONE:-us-west4-a}"
+MACHINE_TYPE="${MACHINE_TYPE:-c3-standard-16}"
+BOOT_DISK_GB="${BOOT_DISK_GB:-150}"
+DEPENDENCY_GROUPS="${IMREAD_DEPENDENCY_GROUPS:-mainstream}"
+PLAN_PATH=""
+DATASET_STORE=""
+DATASET_DESCRIPTOR=""
+RESULTS_STORE=""
+ENVIRONMENT_STORE=""
+DOWNLOAD_DIR=""
 NO_WAIT=false
-SMOKE=false
-NO_CACHE=false
-FORCE_REBUILD=false
 KEEP_ON_FAILURE=false
-UPLOAD_IMAGENET_LOCAL=""
 
-# ── Argument parsing ──────────────────────────────────────────────────────────
+usage() {
+    sed -n '2,34p' "$0" | sed 's/^# \?//'
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --imagenet-bucket)   IMAGENET_BUCKET="$2";      shift 2 ;;
-        --results-bucket)    RESULTS_BUCKET="$2";       shift 2 ;;
-        --zone)              ZONE="$2";                 shift 2 ;;
-        --machine-type)      MACHINE_TYPE="$2";         shift 2 ;;
-        --libs)              LIBS="$2";                 shift 2 ;;
-        --num-images)        NUM_IMAGES="$2";           shift 2 ;;
-        --num-runs)          NUM_RUNS="$2";             shift 2 ;;
-        --dl-runs)           DL_RUNS="$2";              shift 2 ;;
-        --workers)           WORKERS="$2";              shift 2 ;;
-        --no-wait)           NO_WAIT=true;              shift   ;;
-        --smoke)             SMOKE=true;                shift   ;;
-        --no-cache)          NO_CACHE=true;             shift   ;;
-        --force-rebuild)     FORCE_REBUILD=true;        shift   ;;
-        --keep-on-failure)   KEEP_ON_FAILURE=true;      shift   ;;
-        --upload-imagenet)   UPLOAD_IMAGENET_LOCAL="$2"; shift 2 ;;
-        -h|--help)
-            sed -n '2,45p' "$0" | sed 's/^# \?//'
-            exit 0
-            ;;
-        *) echo "Unknown argument: $1"; exit 1 ;;
+        --plan) PLAN_PATH="$2"; shift 2 ;;
+        --dataset-store) DATASET_STORE="$2"; shift 2 ;;
+        --dataset-descriptor) DATASET_DESCRIPTOR="$2"; shift 2 ;;
+        --results-store) RESULTS_STORE="$2"; shift 2 ;;
+        --environment-store) ENVIRONMENT_STORE="$2"; shift 2 ;;
+        --groups) DEPENDENCY_GROUPS="$2"; shift 2 ;;
+        --zone) ZONE="$2"; shift 2 ;;
+        --machine-type) MACHINE_TYPE="$2"; shift 2 ;;
+        --boot-disk-gb) BOOT_DISK_GB="$2"; shift 2 ;;
+        --download-dir) DOWNLOAD_DIR="$2"; shift 2 ;;
+        --no-wait) NO_WAIT=true; shift ;;
+        --keep-on-failure) KEEP_ON_FAILURE=true; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown argument: $1" >&2; exit 2 ;;
     esac
 done
 
-# Smoke mode: smallest run that still validates every library + every
-# distinct code path on a new machine type.
-#   NUM_IMAGES=200  → ~6 batches at bs=32, exercises the loop without burning time.
-#   NUM_RUNS=1      → "did the call succeed?". Stats need a real run.
-#   DL_RUNS=1       → same logic for DataLoader rounds.
-#   WORKERS="0 2"   → 0 = no-fork path; 2 = fork path (catches pyvips-Arm-style
-#                     deadlocks). 4/8 is just scaling, useless for smoke.
-if [[ "$SMOKE" == "true" ]]; then
-    NUM_IMAGES=200
-    NUM_RUNS=1
-    DL_RUNS=1
-    WORKERS="0 2"
-fi
-
-# ── One-time upload subcommand ─────────────────────────────────────────────────
-if [[ -n "$UPLOAD_IMAGENET_LOCAL" ]]; then
-    if [[ -z "$IMAGENET_BUCKET" ]]; then
-        echo "Error: --imagenet-bucket is required for --upload-imagenet"
-        exit 1
+for required in PLAN_PATH DATASET_STORE DATASET_DESCRIPTOR RESULTS_STORE; do
+    if [[ -z "${!required}" ]]; then
+        echo "Missing required option for $required" >&2
+        exit 2
     fi
-    echo "Uploading ImageNet from $UPLOAD_IMAGENET_LOCAL → $IMAGENET_BUCKET"
-    echo "This is a one-time operation; subsequent runs reuse the GCS copy."
-    # Prefer gcloud storage over gsutil (Google's migration path; avoids macOS multiprocessing noise).
-    gcloud storage cp --recursive "$UPLOAD_IMAGENET_LOCAL" "$IMAGENET_BUCKET"
-    echo "Upload complete: $IMAGENET_BUCKET"
-    exit 0
+done
+if [[ ! -f "$PLAN_PATH" ]]; then
+    echo "Plan does not exist: $PLAN_PATH" >&2
+    exit 2
 fi
-
-# ── Validation ────────────────────────────────────────────────────────────────
-if [[ -z "$IMAGENET_BUCKET" ]]; then
-    echo "Error: --imagenet-bucket is required (or set IMAGENET_BUCKET env var)"
-    exit 1
+if ! command -v gcloud >/dev/null 2>&1; then
+    echo "gcloud is required" >&2
+    exit 127
 fi
-if [[ -z "$RESULTS_BUCKET" ]]; then
-    echo "Error: --results-bucket is required (or set RESULTS_BUCKET env var)"
-    exit 1
-fi
+ENVIRONMENT_STORE="${ENVIRONMENT_STORE:-$RESULTS_STORE}"
 
-if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null | grep -q "@"; then
-    echo "Error: no active gcloud account. Run: gcloud auth login"
-    exit 1
-fi
-
-if ! command -v gcloud &>/dev/null; then
-    echo "Error: gcloud not found. Install: brew install --cask gcloud-cli"
-    exit 1
-fi
-
-# ── Run setup ─────────────────────────────────────────────────────────────────
-RUN_NAME="imread-benchmark-$(date +%Y%m%d-%H%M%S)"
-RUN_GCS="${RESULTS_BUCKET%/}/${RUN_NAME}"
-STARTUP_SCRIPT="$SCRIPT_DIR/vm_startup.sh"
-
-# Sibling cache bucket: same parent as the results bucket, but suffix `-cache`
-# so it lives next to per-run artifacts without polluting them. Pre-built
-# venvs land here keyed by (os, arch, hash-of-pyproject+uv.lock).
-# Override with CACHE_BUCKET env var if you want a separate bucket.
-CACHE_BUCKET_DEFAULT="${RESULTS_BUCKET%/*}/imread-cache"
-CACHE_BUCKET="${CACHE_BUCKET:-$CACHE_BUCKET_DEFAULT}"
-[[ "$NO_CACHE" == "true" ]] && CACHE_BUCKET=""
-
-echo "══════════════════════════════════════════════════════"
-echo "  imread benchmark cloud run"
-echo "  Run ID       : $RUN_NAME"
-echo "  Machine      : $MACHINE_TYPE  ($ZONE)"
-echo "  ImageNet     : $IMAGENET_BUCKET"
-echo "  Results      : $RUN_GCS"
-echo "  Libraries    : $LIBS"
-echo "  Num images   : $NUM_IMAGES"
-echo "  Single runs  : $NUM_RUNS"
-echo "  DataLoader   : $DL_RUNS runs × workers=[$WORKERS]"
-[[ "$SMOKE" == "true" ]]         && echo "  Mode         : SMOKE TEST"
-[[ -n "$CACHE_BUCKET" ]]         && echo "  Venv cache   : $CACHE_BUCKET" || echo "  Venv cache   : DISABLED"
-[[ "$FORCE_REBUILD" == "true" ]]   && echo "  Cache lookup : SKIPPED (--force-rebuild → fresh resolve, then re-upload)"
-[[ "$KEEP_ON_FAILURE" == "true" ]] && echo "  On failure   : KEEP VM (--keep-on-failure → manual cleanup required)"
-echo "  Live log     : gcloud storage cat $RUN_GCS/startup.log"
-echo "══════════════════════════════════════════════════════"
-echo
-
-# ── Pack and upload repo ──────────────────────────────────────────────────────
-echo "[1/4] Packing repo..."
-# BSD mktemp (macOS) only substitutes X's that are at the very END of the
-# template. Passing `/tmp/imread-repo-XXXXXX.tar.gz` creates the LITERAL file,
-# which then collides on the next run. Use a temp dir + fixed filename — the
-# dir name is randomised, the contained filename can be anything we want.
-REPO_TMPDIR=$(mktemp -d -t imread-repo.XXXXXX)
-REPO_TARBALL="$REPO_TMPDIR/repo.tar.gz"
-trap 'rm -rf "$REPO_TMPDIR"' EXIT
-cd "$REPO_ROOT"
-# Capture working tree (committed + uncommitted + untracked-but-not-ignored)
-# while excluding artifacts that aren't needed at run time.
-# Listing files via git keeps us in sync with .gitignore for untracked files.
-# The `[ -e "$f" ]` filter drops files that git still tracks but have been
-# deleted-and-not-yet-committed locally — without it, tar bails out with
-# "Cannot stat" the moment any tracked file is removed.
-# Strip macOS-specific tar metadata before packing:
-#   COPYFILE_DISABLE=1   stops macOS from sneaking `._filename` AppleDouble
-#                        companions into the archive (no-op on Linux).
-#   --no-xattrs          drops com.apple.provenance + other xattrs Gatekeeper
-#                        adds to network-downloaded files. Both BSD tar and
-#                        GNU tar accept this flag, so the script is portable.
-# Without these, GNU tar on the Linux VM spams startup.log with thousands of
-# "Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.*'"
-# warnings — harmless, but they drown out useful log lines and waste GCS
-# log-bandwidth on the periodic sync.
-{ git ls-files; git ls-files --others --exclude-standard; } \
-    | grep -vE '^(output|gcp|docs|_internal|paper.*)/' \
-    | while IFS= read -r f; do [ -e "$f" ] && printf '%s\n' "$f"; done \
-    | COPYFILE_DISABLE=1 tar --no-xattrs -czf "$REPO_TARBALL" -T -
-
-echo "[1/4] Uploading repo + startup script to GCS..."
-gcloud --quiet storage cp "$REPO_TARBALL" "$RUN_GCS/repo.tar.gz"
-gcloud --quiet storage cp "$STARTUP_SCRIPT" "$RUN_GCS/vm_startup.sh"
-# Tarball is in $REPO_TMPDIR which the EXIT trap nukes. No manual rm needed.
-echo "[1/4] Done."
-
-# ── Auto-detect arch + disk type from machine type ────────────────────────────
-# Arm:
-#   c4a (Axion / Neoverse V2): arm64 image + hyperdisk-balanced
-#   t2a (Ampere Altra / Neoverse N1, older): arm64 image + pd-balanced
-#       (t2a predates hyperdisk-balanced and rejects it at create time)
-# x86:
-#   c4, c4d, n4 (modern): hyperdisk-balanced
-#   c3, c3d, n2, n2d, e2 (older): pd-ssd
 case "$MACHINE_TYPE" in
-    c4a-*)
-        IMAGE_FAMILY=ubuntu-2404-lts-arm64
-        BOOT_DISK_TYPE=hyperdisk-balanced
-        ;;
-    t2a-*)
-        IMAGE_FAMILY=ubuntu-2404-lts-arm64
-        BOOT_DISK_TYPE=pd-balanced
-        ;;
-    c4-*|c4d-*|n4-*)
-        IMAGE_FAMILY=ubuntu-2404-lts-amd64
-        BOOT_DISK_TYPE=hyperdisk-balanced
-        ;;
-    *)
-        IMAGE_FAMILY=ubuntu-2404-lts-amd64
-        BOOT_DISK_TYPE=pd-ssd
-        ;;
+    c4a-*) IMAGE_FAMILY=ubuntu-2404-lts-arm64; BOOT_DISK_TYPE=hyperdisk-balanced ;;
+    t2a-*) IMAGE_FAMILY=ubuntu-2404-lts-arm64; BOOT_DISK_TYPE=pd-balanced ;;
+    c4-*|c4d-*|n4-*) IMAGE_FAMILY=ubuntu-2404-lts-amd64; BOOT_DISK_TYPE=hyperdisk-balanced ;;
+    *) IMAGE_FAMILY=ubuntu-2404-lts-amd64; BOOT_DISK_TYPE=pd-ssd ;;
 esac
 
-echo "  Image family : $IMAGE_FAMILY"
-echo "  Boot disk    : $BOOT_DISK_TYPE"
-echo
+TEMP_ROOT=$(mktemp -d -t imread-gcp.XXXXXX)
+cleanup_temp() {
+    rm -rf "$TEMP_ROOT"
+}
+trap cleanup_temp EXIT
 
-# ── Create VM ─────────────────────────────────────────────────────────────────
-echo "[2/4] Creating VM $RUN_NAME..."
+cd "$REPO_ROOT"
+{
+    git ls-files
+    git ls-files --others --exclude-standard
+} | sort -u | grep -E '^(imread_benchmark/|pyproject\.toml$|uv\.lock$|README\.md$|LICENSE)' > "$TEMP_ROOT/source-files.txt"
+
+RUNNER_REVISION=$(python3 - "$TEMP_ROOT/source-files.txt" <<'PY'
+import hashlib
+import pathlib
+import sys
+
+digest = hashlib.sha256()
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    path = pathlib.Path(line)
+    if not path.is_file():
+        continue
+    digest.update(line.encode())
+    digest.update(b"\0")
+    digest.update(hashlib.sha256(path.read_bytes()).digest())
+    digest.update(b"\0")
+print(digest.hexdigest())
+PY
+)
+
+REPO_ARCHIVE="$TEMP_ROOT/repo.tar.gz"
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$REPO_ARCHIVE" -T "$TEMP_ROOT/source-files.txt"
+REPO_ARCHIVE_SHA256=$(shasum -a 256 "$REPO_ARCHIVE" | awk '{print $1}')
+PLAN_SHA256=$(shasum -a 256 "$PLAN_PATH" | awk '{print $1}')
+CONTROL_ROOT="${RESULTS_STORE%/}/control"
+REPO_URI="$CONTROL_ROOT/sources/$RUNNER_REVISION/$REPO_ARCHIVE_SHA256.tar.gz"
+PLAN_URI="$CONTROL_ROOT/plans/$PLAN_SHA256.yaml"
+
+upload_create_only() {
+    local source=$1
+    local destination=$2
+    if gcloud storage objects describe "$destination" >/dev/null 2>&1; then
+        return
+    fi
+    gcloud --quiet storage cp "$source" "$destination" --if-generation-match=0
+}
+
+upload_create_only "$REPO_ARCHIVE" "$REPO_URI"
+upload_create_only "$PLAN_PATH" "$PLAN_URI"
+
+RUN_NAME="imread-$(date +%Y%m%d-%H%M%S)-${RUNNER_REVISION:0:8}"
+JOB_ROOT="${RESULTS_STORE%/}/jobs/$RUN_NAME"
+KEEP_VALUE=0
+[[ "$KEEP_ON_FAILURE" == "true" ]] && KEEP_VALUE=1
+METADATA="results-store=$RESULTS_STORE,environment-store=$ENVIRONMENT_STORE,dataset-store=$DATASET_STORE,dataset-descriptor=$DATASET_DESCRIPTOR,plan-uri=$PLAN_URI,repo-uri=$REPO_URI,repo-sha256=$REPO_ARCHIVE_SHA256,runner-revision=$RUNNER_REVISION,dependency-groups=$DEPENDENCY_GROUPS,machine-type=$MACHINE_TYPE,location=$ZONE,job-root=$JOB_ROOT,keep-on-failure=$KEEP_VALUE"
+
+echo "Run              : $RUN_NAME"
+echo "Runner revision  : $RUNNER_REVISION"
+echo "Machine          : $MACHINE_TYPE ($ZONE)"
+echo "Dataset          : $DATASET_STORE/$DATASET_DESCRIPTOR"
+echo "Results          : $RESULTS_STORE"
+echo "Environment cache: $ENVIRONMENT_STORE"
+echo "Groups           : $DEPENDENCY_GROUPS"
+echo "Live log         : gcloud storage cat $JOB_ROOT/startup.log"
+
 gcloud compute instances create "$RUN_NAME" \
     --zone="$ZONE" \
     --machine-type="$MACHINE_TYPE" \
     --image-family="$IMAGE_FAMILY" \
     --image-project=ubuntu-os-cloud \
-    --boot-disk-size=60GB \
+    --boot-disk-size="${BOOT_DISK_GB}GB" \
     --boot-disk-type="$BOOT_DISK_TYPE" \
-    --metadata="results-bucket=$RUN_GCS,imagenet-bucket=$IMAGENET_BUCKET,libs=$LIBS,num-images=$NUM_IMAGES,num-runs=$NUM_RUNS,dl-runs=$DL_RUNS,workers=$WORKERS,repo-tarball=$RUN_GCS/repo.tar.gz,cache-bucket=$CACHE_BUCKET,force-rebuild=$FORCE_REBUILD,keep-on-failure=$([[ $KEEP_ON_FAILURE == true ]] && echo 1 || echo 0)" \
-    --metadata-from-file=startup-script="$STARTUP_SCRIPT" \
+    --metadata="$METADATA" \
+    --metadata-from-file=startup-script="$SCRIPT_DIR/vm_startup.sh" \
     --scopes=storage-rw,compute-rw \
     --maintenance-policy=TERMINATE \
     --no-restart-on-failure \
     --quiet
-echo "[2/4] VM created. It will self-terminate when benchmarks finish."
 
-# ── Cleanup trap ──────────────────────────────────────────────────────────────
-cleanup() {
-    echo
-    echo "Interrupted — deleting VM $RUN_NAME..."
-    gcloud compute instances delete "$RUN_NAME" --zone="$ZONE" --quiet 2>/dev/null || true
-    echo "VM deleted. Partial results (if any) may be at $RUN_GCS/output/"
-    exit 1
+delete_on_interrupt() {
+    gcloud compute instances delete "$RUN_NAME" --zone="$ZONE" --quiet >/dev/null 2>&1 || true
+    exit 130
 }
-trap cleanup INT TERM
+trap delete_on_interrupt INT TERM
 
-# ── Fire-and-forget mode ──────────────────────────────────────────────────────
 if [[ "$NO_WAIT" == "true" ]]; then
-    echo
-    echo "Fire-and-forget mode."
-    echo "The VM runs benchmarks, uploads results to GCS, and deletes itself."
-    echo "You can close this terminal or shut down your laptop — nothing runs locally."
-    echo
-    echo "Monitor progress : gcloud storage cat $RUN_GCS/startup.log"
-    echo "Check if done    : gcloud storage objects describe $RUN_GCS/DONE"
-    echo "Fetch results    : gcloud storage cp --recursive $RUN_GCS/output/ ./output/"
+    echo "VM is running asynchronously and will delete itself."
     exit 0
 fi
 
-# ── Poll for completion ───────────────────────────────────────────────────────
-echo "[3/4] Waiting for benchmarks to finish (polling every 30s)..."
-echo "      Live log: gcloud storage cat $RUN_GCS/startup.log"
-echo
-START_TS=$(date +%s)
-
 while true; do
-    sleep 30
-
-    ELAPSED=$(( $(date +%s) - START_TS ))
-    ELAPSED_FMT="$(( ELAPSED / 3600 ))h $(( (ELAPSED % 3600) / 60 ))m"
-
-    if gcloud storage objects describe "$RUN_GCS/DONE" &>/dev/null; then
-        echo "[$ELAPSED_FMT] DONE sentinel found — benchmarks complete."
+    sleep 20
+    if gcloud storage objects describe "$JOB_ROOT/DONE.json" >/dev/null 2>&1; then
+        echo "Campaign worker completed."
         break
     fi
-
-    # FAILED sentinel is written by the ERR trap in vm_startup.sh before
-    # self-delete. Treats explicit failures as terminal so we don't spin
-    # waiting for a VM that's about to vanish.
-    if gcloud storage objects describe "$RUN_GCS/FAILED" &>/dev/null; then
-        echo "[$ELAPSED_FMT] FAILED sentinel found — startup script crashed."
-        echo "Cause: $(gcloud --quiet storage cat "$RUN_GCS/FAILED" 2>/dev/null | head -1)"
-        echo "Logs : gcloud storage cat $RUN_GCS/startup.log"
+    if gcloud storage objects describe "$JOB_ROOT/FAILED.json" >/dev/null 2>&1; then
+        gcloud storage cat "$JOB_ROOT/FAILED.json" || true
+        echo "Campaign worker failed; see $JOB_ROOT/startup.log" >&2
         exit 1
     fi
-
-    # VM self-deletes after writing DONE/FAILED. If it's gone without
-    # either, the VM was force-killed externally (e.g. preempted).
-    VM_STATUS=$(gcloud compute instances describe "$RUN_NAME" \
-        --zone="$ZONE" --format="value(status)" 2>/dev/null || echo "GONE")
-
-    if [[ "$VM_STATUS" == "GONE" ]]; then
-        if gcloud storage objects describe "$RUN_GCS/DONE" &>/dev/null; then
-            echo "[$ELAPSED_FMT] VM deleted itself after completing. DONE sentinel found."
-            break
-        fi
-        echo "[$ELAPSED_FMT] WARNING: VM is gone but no DONE/FAILED sentinel."
-        echo "Likely preempted or manually deleted. Check: gcloud storage cat $RUN_GCS/startup.log"
+    if ! gcloud compute instances describe "$RUN_NAME" --zone="$ZONE" >/dev/null 2>&1; then
+        echo "VM disappeared without a terminal marker; see $JOB_ROOT/startup.log" >&2
         exit 1
     fi
-
-    echo "[$ELAPSED_FMT] Status: $VM_STATUS — still running..."
 done
 
-# ── Fetch results ─────────────────────────────────────────────────────────────
-# rsync (not `cp --recursive`) so the remote `output/<machine_id>/` lands as
-# `./output/<machine_id>/`, not nested under `./output/output/<machine_id>/`.
-# `cp --recursive gs://.../output/ ./output/` copies the SOURCE directory as a
-# subdirectory under DESTINATION, which produces the wrong nesting and silently
-# scatters results across runs (every machine type ends up under output/output/).
-echo "[4/4] Downloading results..."
-mkdir -p "$REPO_ROOT/output"
-gcloud storage rsync --recursive "$RUN_GCS/output/" "$REPO_ROOT/output/"
-echo "[4/4] Results saved to: $REPO_ROOT/output/"
-
-echo
-echo "══════════════════════════════════════════════════════"
-echo "  Run complete: $RUN_NAME"
-echo "  Results    : $REPO_ROOT/output/"
-echo "  Full log   : gcloud storage cat $RUN_GCS/startup.log"
-echo "  VM self-deleted after benchmarks finished."
-echo "══════════════════════════════════════════════════════"
+if [[ -n "$DOWNLOAD_DIR" ]]; then
+    mkdir -p "$DOWNLOAD_DIR"
+    gcloud storage rsync --recursive "$JOB_ROOT" "$DOWNLOAD_DIR/$RUN_NAME"
+fi

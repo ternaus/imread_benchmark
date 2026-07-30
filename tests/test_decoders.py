@@ -12,7 +12,9 @@ import platform
 import numpy as np
 import pytest
 
+from imread_benchmark.contracts import OutputContract, validate_output
 from imread_benchmark.decoders import REGISTRY, BaseDecoder
+from imread_benchmark.decoders.pillow_decoder import PillowDecoder
 
 from .conftest import is_decoder_available
 
@@ -23,6 +25,7 @@ available_decoders = [pytest.param(cls, id=name) for name, cls in REGISTRY.items
 def test_decode_from_bytes_shape_and_dtype(decoder_cls, jpeg_bytes):
     decoder = decoder_cls()
     result = decoder.decode(jpeg_bytes)
+    validate_output(result, OutputContract.normalized_rgb())
     assert isinstance(result, np.ndarray), f"{decoder.name}: decode() must return ndarray"
     assert result.ndim == 3, f"{decoder.name}: expected 3-D array, got {result.ndim}-D"
     assert result.shape[2] == 3, f"{decoder.name}: expected 3 channels, got {result.shape[2]}"
@@ -33,6 +36,7 @@ def test_decode_from_bytes_shape_and_dtype(decoder_cls, jpeg_bytes):
 def test_decode_path(decoder_cls, jpeg_path):
     decoder = decoder_cls()
     result = decoder.decode_path(str(jpeg_path))
+    validate_output(result, OutputContract.normalized_rgb())
     assert isinstance(result, np.ndarray)
     assert result.ndim == 3
     assert result.shape[2] == 3
@@ -45,6 +49,14 @@ def test_decode_nonzero_output(decoder_cls, jpeg_bytes):
     decoder = decoder_cls()
     result = decoder.decode(jpeg_bytes)
     assert result.max() > 0, f"{decoder.name}: decoded image is all zeros"
+
+
+def test_pillow_returns_materialized_owned_rgb(jpeg_bytes):
+    result = PillowDecoder().decode(jpeg_bytes)
+
+    assert result.flags.owndata
+    assert result.flags.writeable
+    assert result.shape == (48, 64, 3)
 
 
 # ─── Decoder metadata / contract ──────────────────────────────────────────────

@@ -29,6 +29,11 @@ class BaseDecoder(ABC):
     # nobody wires tf.io.decode_jpeg into a torch worker in practice).
     in_dataloader: ClassVar[bool] = True
 
+    # Existing adapters expose the benchmark's normalized HWC uint8 RGB
+    # result. A future adapter may opt into a separate native-output method;
+    # declaring this explicitly prevents "native" from being inferred.
+    native_output_available: ClassVar[bool] = False
+
     @abstractmethod
     def decode(self, data: bytes) -> np.ndarray:
         """Decode JPEG bytes into an (H, W, 3) uint8 RGB numpy array."""

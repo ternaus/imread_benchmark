@@ -133,5 +133,6 @@ _internal/
 /*.jpeg
 /*.pdf
 
-# Legacy plot output directory (plots go under `_internal/plots/` via tools/create_plots.py)
-/images/
+# Local schema-2 campaign state
+/artifacts/
+/attempts/

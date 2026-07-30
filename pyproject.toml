@@ -14,19 +14,20 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+  "jsonschema>=4.23",
   "numpy",
   "pandas",
   "py-cpuinfo",
+  "pyyaml>=6",
   "tqdm",
   "typer>=0.12",
+  "zstandard>=0.23",
 ]
 # Two groups, not thirteen. Real conflicts only exist between these two:
 #   tensorflow vs torch  — numpy/protobuf pin fights
 # Everything else (ajpegli, opencv, skimage, imageio, kornia-rs, simplejpeg,
 # turbojpeg, imagecodecs, pyvips, jpeg4py, torch, torchvision, Pillow) coexists in one venv.
 #
-# Pillow-SIMD WAS a third group (incompatible with mainstream Pillow). Dropped
-# 2026-04 — see docs/gcp_benchmarks.md "Why no Pillow-SIMD?" for rationale.
 optional-dependencies.mainstream = [
   "ajpegli",
   "imagecodecs",
@@ -68,9 +69,11 @@ entry-points."imread_benchmark.decoders".turbojpeg = "imread_benchmark.decoders.
 
 [dependency-groups]
 dev = [
+  "mypy>=1.20",
   "pillow",
   "pre-commit>=3.5",
   "pytest>=8",
+  "types-pyyaml>=6.0.12",
 ]
 
 [tool.hatch]
@@ -131,6 +134,7 @@ lint.ignore = [
   "ANN401",
   "B027",
   "BLE001",
+  "CPY001",
   "D100",
   "D101",
   "D102",
@@ -162,6 +166,7 @@ lint.per-file-ignores."imread_benchmark/cli.py" = [
   "B008",    # typer.Option(...) in defaults is the documented pattern
   "FBT001",  # --skip-setup is a typer flag, must be a bool param
   "PLR0913", # `run` collects every CLI flag; splitting hurts UX, not complexity
+  "PLR0917", # Typer command parameters map directly to CLI options
   "S603",    # subprocess into our own worker scripts with controlled argv
   "S607",    # we require `uv` on PATH; absolute path would defeat the install docs
 ]
@@ -180,6 +185,7 @@ disallow_any_generics = true
 check_untyped_defs = true
 no_implicit_reexport = true
 disallow_untyped_defs = true
+overrides = [ { module = [ "skimage.*", "tifffile.*" ], follow_imports = "skip" } ]
 
 [tool.pytest]
 ini_options.testpaths = [ "tests" ]
