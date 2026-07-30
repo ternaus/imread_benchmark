@@ -24,6 +24,11 @@ uv run imread-benchmark plan instantiate \
   --workload fodb-mixed
 ```
 
+For the first real-cloud gate, use
+[`examples/fodb-smoke.template.yaml`](../examples/fodb-smoke.template.yaml)
+against `fodb-native`. It expands to nine runs: Pillow and OpenCV under both
+protocols, with loader workers 0 and 2.
+
 ## Launch
 
 ```bash

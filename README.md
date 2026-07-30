@@ -192,6 +192,10 @@ The complete five-block FODB matrix is available as
 [`examples/fodb-experiment.template.yaml`](examples/fodb-experiment.template.yaml).
 The generated workload plans are reused unchanged across CPU platforms;
 captured platform identity remains part of every run key.
+Before launching that matrix, instantiate
+[`examples/fodb-smoke.template.yaml`](examples/fodb-smoke.template.yaml). It
+contains the preregistered nine-run Pillow/OpenCV gate: both protocols, workers
+0 and 2, one repetition block.
 
 ## Run locally
 

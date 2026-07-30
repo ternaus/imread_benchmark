@@ -151,12 +151,25 @@ Do not turn overlapping noisy means into a strict ranking sentence.
 
 1. Package audit: hashes, manifest counts, resolution/compressed-size strata,
    provenance distribution, and decoded-memory bound.
-2. One x86 smoke: Pillow and OpenCV, both protocols, workers 0 and 2.
+2. One x86 smoke from
+   [`examples/fodb-smoke.template.yaml`](../examples/fodb-smoke.template.yaml):
+   Pillow and OpenCV, both protocols, workers 0 and 2, exactly nine run specs.
 3. One ARM smoke with the same run specs.
 4. Kill after K of N runs; verify a fresh VM launches exactly N−K run workers.
 5. Verify every bundle, environment descriptor, platform descriptor, worker
    handshake, and publication sidecar.
 6. Freeze the final matrix before launching the full platform sweep.
+
+Instantiate the smoke plan against `fodb-native` before launching either
+machine:
+
+```bash
+uv run imread-benchmark plan instantiate \
+  examples/fodb-smoke.template.yaml \
+  --package-descriptor /data/packages/PACKAGE_ID/package.json \
+  --output-dir plans/smoke \
+  --workload fodb-native
+```
 
 ## Figures and tables
 

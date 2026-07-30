@@ -165,6 +165,23 @@ def test_plan_instantiation_preserves_existing_output_when_validation_fails(
     assert existing.read_text() == "previous plan\n"
 
 
+def test_fodb_smoke_template_expands_to_nine_runs(tmp_path: Path, jpeg_dir: Path) -> None:
+    descriptor_path = build_dataset_package(
+        package_name="fixture-jpegs",
+        workloads={"fixture": jpeg_dir},
+        output_root=tmp_path / "packages",
+        provenance={"source": "pytest"},
+    )
+
+    instantiated = instantiate_experiment_plans(
+        template_path=Path(__file__).parents[1] / "examples" / "fodb-smoke.template.yaml",
+        package_descriptor=descriptor_path,
+        output_dir=tmp_path / "plans",
+    )
+
+    assert instantiated[0].run_count == 9
+
+
 @pytest.mark.parametrize(
     "template_name",
     [
