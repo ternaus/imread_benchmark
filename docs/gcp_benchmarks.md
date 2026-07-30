@@ -38,7 +38,7 @@ protocols, with loader workers 0 and 2.
   --dataset-descriptor datasets/<package-id>/package.json \
   --results-store gs://YOUR_BUCKET/imread-results \
   --environment-store gs://YOUR_BUCKET/imread-cache \
-  --machine-type c3-standard-16 \
+  --machine-type c4-standard-16 \
   --zone us-west4-a \
   --groups mainstream \
   --no-wait
@@ -89,7 +89,7 @@ Incomplete prefixes are ignored.
 
 ```bash
 ./gcp/run-many.sh \
-  --machine-types "c3-standard-16 c3d-standard-16 c4d-standard-16 c4a-standard-16" \
+  --machine-types "c4-standard-16 c3d-standard-16 c4d-standard-16 c4a-standard-16" \
   --plan experiment.yaml \
   --dataset-store gs://YOUR_BUCKET/imread \
   --dataset-descriptor datasets/<package-id>/package.json \

@@ -14,7 +14,7 @@ while [[ $# -gt 0 ]]; do
         --machine-type) MACHINE_TYPES="$2"; shift 2 ;;
         --zones) ZONES="$2"; shift 2 ;;
         -h|--help)
-            echo "Usage: $0 --machine-types 'c3-standard-8 c4a-standard-8' [run.sh options]"
+            echo "Usage: $0 --machine-types 'c4-standard-8 c4a-standard-8' [run.sh options]"
             exit 0
             ;;
         *) PASSTHROUGH+=("$1"); shift ;;

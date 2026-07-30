@@ -72,7 +72,7 @@ Use the following core GCP platform set at 16 vCPUs:
 
 | Machine type | CPU family | Role in the design |
 | --- | --- | --- |
-| `c3-standard-16` | Intel Sapphire Rapids | x86 Intel reference |
+| `c4-standard-16` | Intel Xeon (runtime CPU captured) | x86 Intel reference |
 | `c3d-standard-16` | AMD EPYC Genoa | x86 AMD Zen 4 |
 | `c4d-standard-16` | AMD EPYC Turin | matched AMD Zen 5 generation contrast |
 | `c4a-standard-16` | Google Axion, Arm Neoverse V2 | current Arm reference |

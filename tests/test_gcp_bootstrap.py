@@ -16,3 +16,7 @@ def test_gcp_shell_is_syntax_valid_and_delegates_benchmark_semantics_to_python()
     assert "environment provision" in startup
     assert "campaign run" in startup
     assert "DONE.json" in startup
+
+    launcher = scripts[0].read_text()
+    assert 'MACHINE_TYPE="${MACHINE_TYPE:-c4-standard-16}"' in launcher
+    assert "c3-standard-16" not in launcher

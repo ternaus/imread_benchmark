@@ -244,7 +244,7 @@ was explicitly requested.
   --dataset-descriptor datasets/<package-id>/package.json \
   --results-store gs://YOUR_BUCKET/imread-results \
   --environment-store gs://YOUR_BUCKET/imread-cache \
-  --machine-type c3-standard-16 \
+  --machine-type c4-standard-16 \
   --groups mainstream \
   --no-wait
 ```

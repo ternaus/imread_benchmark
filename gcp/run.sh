@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 ZONE="${ZONE:-us-west4-a}"
-MACHINE_TYPE="${MACHINE_TYPE:-c3-standard-16}"
+MACHINE_TYPE="${MACHINE_TYPE:-c4-standard-16}"
 BOOT_DISK_GB="${BOOT_DISK_GB:-150}"
 DEPENDENCY_GROUPS="${IMREAD_DEPENDENCY_GROUPS:-mainstream}"
 PLAN_PATH=""
