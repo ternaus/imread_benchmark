@@ -128,12 +128,13 @@ uv run imread-benchmark dataset controlled-package \
   --compressed-byte-limit 2147483648
 ```
 
-This produces 16 workloads with identical source membership and order. Use
+This produces 16 workloads with identical source membership and order. Generate
+their plans from
 [`examples/controlled-ablation.template.yaml`](examples/controlled-ablation.template.yaml)
-once per workload; do not interpret FODB's naturally confounded size/quality
-mixture as this controlled effect.
+with `plan instantiate`; do not interpret FODB's naturally confounded
+size/quality mixture as this controlled effect.
 
-## Validate a plan before spending money
+## Generate and validate plans before spending money
 
 An experiment plan is schema 2 YAML and must pin the IDs printed in
 `package.json`. Example protocol profiles:
@@ -163,20 +164,34 @@ execution:
   maximum_memory_fraction: 0.6
 ```
 
-Validate and materialize the deterministic randomized matrix:
+Generate one pinned, validated plan for each selected workload. Omit
+`--workload` to generate plans for every workload in the package:
 
 ```bash
-uv run imread-benchmark plan validate experiment.yaml \
+uv run imread-benchmark plan instantiate \
+  examples/fodb-experiment.template.yaml \
+  --package-descriptor /data/packages/<package-id>/package.json \
+  --output-dir plans/fodb \
+  --workload fodb-native \
+  --workload fodb-mixed
+```
+
+The command prints each plan ID and its run count per platform. Inspect or
+materialize the deterministic randomized matrix when needed:
+
+```bash
+uv run imread-benchmark plan validate plans/fodb/fodb-native.yaml \
   --package-descriptor /data/packages/<package-id>/package.json
 
-uv run imread-benchmark plan expand experiment.yaml \
+uv run imread-benchmark plan expand plans/fodb/fodb-native.yaml \
   --package-descriptor /data/packages/<package-id>/package.json \
   --output expanded-plan.json
 ```
 
 The complete five-block FODB matrix is available as
 [`examples/fodb-experiment.template.yaml`](examples/fodb-experiment.template.yaml).
-Instantiate it separately for `fodb-native` and `fodb-mixed`.
+The generated workload plans are reused unchanged across CPU platforms;
+captured platform identity remains part of every run key.
 
 ## Run locally
 

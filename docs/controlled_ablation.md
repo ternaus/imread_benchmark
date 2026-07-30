@@ -83,11 +83,19 @@ uv run imread-benchmark dataset publish \
 
 ## Benchmark and analyze
 
-Instantiate
-[`examples/controlled-ablation.template.yaml`](../examples/controlled-ablation.template.yaml)
-once per workload, using that workload's exact manifest ID and item count from
-`package.json`. Keep the platform, decoder matrix, repetition count, thread
-profiles, source set, and measurement settings identical across all 16 plans.
+Generate all 16 workload plans from the package descriptor in one command:
+
+```bash
+uv run imread-benchmark plan instantiate \
+  examples/controlled-ablation.template.yaml \
+  --package-descriptor /data/controlled-jpeg/packages/PACKAGE_ID/package.json \
+  --output-dir plans/controlled
+```
+
+The command fills each workload's exact manifest ID and item count, then
+validates and expands every result before returning it. Keep the platform,
+decoder matrix, repetition count, thread profiles, source set, and measurement
+settings identical across all 16 plans.
 
 The broad controlled grid measures `decode-memory`; this isolates decoder
 capacity without multiplying the already large design by every worker count.

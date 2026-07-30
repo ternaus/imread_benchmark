@@ -7,7 +7,7 @@ from PIL import Image
 from typer.testing import CliRunner
 
 from imread_benchmark.cli import app
-from imread_benchmark.datasets.package import open_dataset_package
+from imread_benchmark.datasets.package import build_dataset_package, open_dataset_package
 
 runner = CliRunner()
 
@@ -92,3 +92,34 @@ def test_list_decoders_is_machine_readable() -> None:
     rows = json.loads(result.stdout)
     assert {row["decoder_id"] for row in rows} >= {"pillow", "opencv"}
     assert all(row["schema_version"] == "2.0" for row in rows)
+
+
+def test_plan_instantiate_command_generates_valid_workload_plan(tmp_path: Path, jpeg_dir: Path) -> None:
+    descriptor_path = build_dataset_package(
+        package_name="fixture-jpegs",
+        workloads={"fixture": jpeg_dir},
+        output_root=tmp_path / "packages",
+        provenance={"source": "pytest"},
+    )
+    template = Path(__file__).parents[1] / "examples" / "fodb-experiment.template.yaml"
+
+    result = runner.invoke(
+        app,
+        [
+            "plan",
+            "instantiate",
+            str(template),
+            "--package-descriptor",
+            str(descriptor_path),
+            "--output-dir",
+            str(tmp_path / "plans"),
+            "--workload",
+            "fixture",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    document = json.loads(result.stdout)
+    assert document["schema_version"] == "2.0"
+    assert document["plans"][0]["workload_id"] == "fixture"
+    assert Path(document["plans"][0]["path"]).is_file()

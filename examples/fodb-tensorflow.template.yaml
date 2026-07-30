@@ -1,5 +1,5 @@
 schema_version: "2.0"
-experiment_name: fodb-WORKLOAD-tensorflow-PLATFORM
+experiment_name: fodb-WORKLOAD_ID-tensorflow
 seed: 20260729
 repetitions: 5
 dataset:

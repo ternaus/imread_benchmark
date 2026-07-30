@@ -48,9 +48,21 @@ The full build and interpretation contract is in
 ## Core matrix
 
 Start from [`examples/fodb-experiment.template.yaml`](../examples/fodb-experiment.template.yaml)
-and instantiate it once for `fodb-native` and once for `fodb-mixed`, replacing
-every package/manifest/count placeholder with the package descriptor values.
-The two plans deliberately remain distinct evidence populations.
+and generate the two pinned plans directly from the package descriptor:
+
+```bash
+uv run imread-benchmark plan instantiate \
+  examples/fodb-experiment.template.yaml \
+  --package-descriptor /data/packages/PACKAGE_ID/package.json \
+  --output-dir plans/fodb \
+  --workload fodb-native \
+  --workload fodb-mixed
+```
+
+The command fills the package, workload, manifest, and item-count identities,
+then validates and expands each result before returning it. The two plans
+deliberately remain distinct evidence populations and are reused unchanged
+across CPU platforms.
 TensorFlow belongs to its own incompatible dependency group and is not a
 PyTorch DataLoader adapter. If its decoder-only result remains useful, run the
 separate [`examples/fodb-tensorflow.template.yaml`](../examples/fodb-tensorflow.template.yaml)

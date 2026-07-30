@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from imread_benchmark.datasets.package import build_dataset_package
-from imread_benchmark.plans import PlanError, RunConfiguration, expand_experiment_plan, load_experiment_plan
+from imread_benchmark.plans import (
+    PlanError,
+    RunConfiguration,
+    expand_experiment_plan,
+    instantiate_experiment_plans,
+    load_experiment_plan,
+)
 
 
 def test_plan_pins_exact_package_workload_manifest_and_selection(
@@ -97,6 +103,68 @@ def test_plan_accepts_a_verified_materialized_descriptor_override(tmp_path: Path
     assert plan.dataset.descriptor_path == descriptor_path.resolve()
 
 
+def test_plan_instantiation_fills_and_validates_every_package_workload(
+    tmp_path: Path,
+    jpeg_dir: Path,
+) -> None:
+    descriptor_path = build_dataset_package(
+        package_name="fixture-jpegs",
+        workloads={"native": jpeg_dir, "mixed": jpeg_dir},
+        output_root=tmp_path / "packages",
+        provenance={"source": "pytest"},
+    )
+    template = Path(__file__).parents[1] / "examples" / "fodb-experiment.template.yaml"
+
+    instantiated = instantiate_experiment_plans(
+        template_path=template,
+        package_descriptor=descriptor_path,
+        output_dir=tmp_path / "plans",
+    )
+
+    assert tuple(item.workload_id for item in instantiated) == ("mixed", "native")
+    assert all(item.run_count > 0 for item in instantiated)
+    assert all(item.path.is_file() for item in instantiated)
+    for item in instantiated:
+        document = item.path.read_text()
+        assert "PACKAGE_ID" not in document
+        assert "WORKLOAD_ID" not in document
+        assert "MANIFEST_ID" not in document
+        assert "ITEM_COUNT" not in document
+        plan = load_experiment_plan(item.path, dataset_descriptor=descriptor_path)
+        assert plan.dataset.workload_id == item.workload_id
+        assert expand_experiment_plan(plan)[0].plan_id == item.plan_id
+
+
+def test_plan_instantiation_preserves_existing_output_when_validation_fails(
+    tmp_path: Path,
+    jpeg_dir: Path,
+) -> None:
+    descriptor_path = build_dataset_package(
+        package_name="fixture-jpegs",
+        workloads={"fixture": jpeg_dir},
+        output_root=tmp_path / "packages",
+        provenance={"source": "pytest"},
+    )
+    source_template = Path(__file__).parents[1] / "examples" / "fodb-experiment.template.yaml"
+    invalid_template = tmp_path / "invalid.template.yaml"
+    invalid_template.write_text(
+        source_template.read_text().replace("per_run_subprocess: true", "per_run_subprocess: false"),
+    )
+    output_dir = tmp_path / "plans"
+    output_dir.mkdir()
+    existing = output_dir / "fixture.yaml"
+    existing.write_text("previous plan\n")
+
+    with pytest.raises(PlanError, match="per_run_subprocess"):
+        instantiate_experiment_plans(
+            template_path=invalid_template,
+            package_descriptor=descriptor_path,
+            output_dir=output_dir,
+        )
+
+    assert existing.read_text() == "previous plan\n"
+
+
 @pytest.mark.parametrize(
     "template_name",
     [
@@ -116,25 +184,21 @@ def test_checked_in_plan_templates_expand_against_a_real_package(
         output_root=tmp_path / "packages",
         provenance={"source": "pytest"},
     )
-    descriptor = json.loads(descriptor_path.read_text())
-    workload = descriptor["workloads"]["fixture"]
     template_path = Path(__file__).parents[1] / "examples" / template_name
-    plan_text = (
-        template_path.read_text()
-        .replace("/data/datasets/PACKAGE_ID/package.json", str(descriptor_path))
-        .replace("PACKAGE_ID", descriptor["package_id"])
-        .replace("WORKLOAD_ID", "fixture")
-        .replace("MANIFEST_ID", workload["manifest_id"])
-        .replace("ITEM_COUNT", "4")
-        .replace("PLATFORM", "fixture")
+    instantiated = instantiate_experiment_plans(
+        template_path=template_path,
+        package_descriptor=descriptor_path,
+        output_dir=tmp_path / "plans",
+        workload_ids=("fixture",),
     )
-    plan_path = tmp_path / template_name
-    plan_path.write_text(plan_text)
-
-    templates = expand_experiment_plan(load_experiment_plan(plan_path))
+    templates = expand_experiment_plan(
+        load_experiment_plan(instantiated[0].path, dataset_descriptor=descriptor_path),
+    )
 
     assert templates
-    assert {template.configuration.package_id for template in templates} == {descriptor["package_id"]}
+    assert {template.configuration.package_id for template in templates} == {
+        json.loads(descriptor_path.read_text())["package_id"],
+    }
 
 
 def test_plan_expands_worker_profiles_in_seeded_repetition_blocks(tmp_path: Path, jpeg_dir: Path) -> None:

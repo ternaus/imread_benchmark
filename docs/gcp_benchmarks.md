@@ -7,10 +7,22 @@ or result semantics.
 ## Before launch
 
 1. Build and publish the dataset package.
-2. Write a plan that pins its package/workload/manifest IDs.
+2. Generate pinned workload plans from the package descriptor with `plan
+   instantiate`.
 3. Validate and expand the plan locally.
 4. Confirm the target service account can read the private dataset prefix,
    create result/cache objects, and delete its own VM.
+
+For example:
+
+```bash
+uv run imread-benchmark plan instantiate \
+  examples/fodb-experiment.template.yaml \
+  --package-descriptor /data/packages/PACKAGE_ID/package.json \
+  --output-dir plans/fodb \
+  --workload fodb-native \
+  --workload fodb-mixed
+```
 
 ## Launch
 

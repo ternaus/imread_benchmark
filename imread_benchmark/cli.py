@@ -19,12 +19,12 @@ from imread_benchmark.environments import EnvironmentRequest, provision_environm
 from imread_benchmark.environments.cache import materialize_environment_cache, publish_environment_cache
 from imread_benchmark.execution.campaign import CampaignConfig, run_campaign
 from imread_benchmark.execution.coordinator import RemoteCheckpoint
-from imread_benchmark.plans import expand_experiment_plan, load_experiment_plan
+from imread_benchmark.plans import expand_experiment_plan, instantiate_experiment_plans, load_experiment_plan
 from imread_benchmark.platforms import capture_current_platform, write_platform_descriptor
 
 app = typer.Typer(add_completion=False, help="Reproducible JPEG decoder benchmark campaigns.")
 dataset_app = typer.Typer(help="Build, publish, and materialize immutable dataset packages.")
-plan_app = typer.Typer(help="Validate and expand schema-2 experiment plans.")
+plan_app = typer.Typer(help="Instantiate, validate, and expand schema-2 experiment plans.")
 environment_app = typer.Typer(help="Provision immutable lock-backed worker environments.")
 platform_app = typer.Typer(help="Capture platform provenance.")
 artifacts_app = typer.Typer(help="Validate committed run bundles.")
@@ -147,6 +147,23 @@ def dataset_materialize(
         cache_root=cache_root,
     )
     _emit_json({"descriptor": str(descriptor), "schema_version": "2.0"})
+
+
+@plan_app.command("instantiate")
+def plan_instantiate(
+    template_path: Path = typer.Argument(..., exists=True, dir_okay=False),
+    package_descriptor: Path = typer.Option(..., "--package-descriptor", exists=True, dir_okay=False),
+    output_dir: Path = typer.Option(..., "--output-dir", file_okay=False),
+    workload: list[str] = typer.Option([], "--workload"),
+) -> None:
+    """Fill and validate one plan per selected package workload."""
+    plans = instantiate_experiment_plans(
+        template_path=template_path,
+        package_descriptor=package_descriptor,
+        output_dir=output_dir,
+        workload_ids=tuple(workload),
+    )
+    _emit_json({"plans": [plan.to_dict() for plan in plans], "schema_version": "2.0"})
 
 
 @plan_app.command("validate")
