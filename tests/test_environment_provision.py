@@ -21,6 +21,7 @@ def test_frozen_environment_is_built_atomically_and_reused(tmp_path: Path, monke
         dependency_group="mainstream",
         runner_revision="1" * 40,
         python_executable=Path(sys.executable),
+        native_backends=(("fixture", "1.0"),),
         uv_command=(sys.executable, str(Path(__file__).parent / "fixtures" / "fake_uv.py")),
     )
 
@@ -33,7 +34,7 @@ def test_frozen_environment_is_built_atomically_and_reused(tmp_path: Path, monke
             python=request.python_identity,
             platform_tags=request.platform_tags,
             distributions=(("fixture", "1.0"),),
-            native_backends={"fixture": key[:12]},
+            native_backends=dict(request.native_backends),
         )
 
     first = provision_environment(request, probe=probe)
@@ -54,7 +55,7 @@ def test_frozen_environment_is_built_atomically_and_reused(tmp_path: Path, monke
     assert calls[0]["argv"][-2:] == ["--extra", "mainstream"]
 
 
-def test_environment_key_changes_with_lock_python_group_or_revision(tmp_path: Path) -> None:
+def test_environment_key_changes_with_lock_python_group_revision_or_native_backend(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
     (project / "uv.lock").write_text("first\n")
@@ -88,11 +89,20 @@ def test_environment_key_changes_with_lock_python_group_or_revision(tmp_path: Pa
         runner_revision="2" * 40,
         python_executable=Path(sys.executable),
     )
+    backend_changed = EnvironmentRequest(
+        project_root=project,
+        cache_root=tmp_path / "cache",
+        dependency_group="mainstream",
+        runner_revision="1" * 40,
+        python_executable=Path(sys.executable),
+        native_backends=(("libjpeg-turbo", "3.2.0"),),
+    )
 
     keys = {
         base.environment_key,
         lock_changed.environment_key,
         group_changed.environment_key,
         revision_changed.environment_key,
+        backend_changed.environment_key,
     }
-    assert len(keys) == 4
+    assert len(keys) == 5

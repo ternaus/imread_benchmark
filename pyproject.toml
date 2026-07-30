@@ -36,7 +36,7 @@ optional-dependencies.mainstream = [
   "kornia-rs",
   "opencv-python-headless",
   "pillow",
-  "pyturbojpeg<2",
+  "pyturbojpeg",
   "pyvips",
   # Bundled libvips wheels (Linux x86/arm + macOS x86/arm + Windows). Lets
   # pyvips run in CFFI API mode without `apt install libvips-dev` /
@@ -176,7 +176,6 @@ lint.unfixable = []
 lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.mypy]
-python_version = "3.11"
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true

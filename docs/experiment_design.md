@@ -45,6 +45,50 @@ Do not merge those rows with FODB and call the union a single resolution effect.
 The full build and interpretation contract is in
 [Controlled resolution and JPEG-quality ablation](controlled_ablation.md).
 
+## Dependency freeze
+
+Use the latest stable dependency set available at the preregistered freeze,
+then keep it unchanged across every pilot and evidence run. The 2026-07-30
+freeze resolves the direct mainstream decoder dependencies as follows on the
+Python 3.12 benchmark image:
+
+| Distribution | Frozen version |
+| --- | ---: |
+| ajpegli | 1.0.0 |
+| imagecodecs | 2026.6.26 |
+| imageio | 2.37.4 |
+| jpeg4py (Linux only) | 0.1.4 |
+| kornia-rs | 0.1.14 |
+| opencv-python-headless | 5.0.0.93 |
+| Pillow | 12.3.0 |
+| PyTurboJPEG | 2.5.0 |
+| pyvips | 3.1.1 |
+| pyvips-binary | 8.18.4 |
+| scikit-image | 0.26.0 |
+| simplejpeg | 1.9.0 |
+| torch | 2.13.0 |
+| torchvision | 0.28.0 |
+
+PyTurboJPEG uses the verified upstream libjpeg-turbo 3.2.0 build on both
+x86-64 and Arm. Transitive dependencies and Python-version-specific branches
+are authoritative in `uv.lock`, rather than duplicated in this document.
+
+Create a new freeze before the first smoke, not between machines:
+
+```bash
+uv lock --upgrade
+uv sync --frozen --group dev --extra mainstream
+uv run pytest -q
+uv run pre-commit run --all-files
+```
+
+Commit `pyproject.toml`, `uv.lock`, adapter changes, and the native installer
+together. The environment identity includes the lock hash, exact installed
+distribution versions, and declared native backend versions. If a dependency
+release is accepted after a smoke has produced evidence, discard that evidence
+and restart every platform with the new environment identity. Otherwise defer
+the release until the next benchmark revision.
+
 ## Core matrix
 
 Start from [`examples/fodb-experiment.template.yaml`](../examples/fodb-experiment.template.yaml)

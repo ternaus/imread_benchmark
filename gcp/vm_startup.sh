@@ -80,7 +80,7 @@ echo "Runner revision: $RUNNER_REVISION"
 export DEBIAN_FRONTEND=noninteractive
 cloud-init status --wait || true
 apt-get update -q
-apt-get install -y -q curl git libjpeg-turbo8-dev libturbojpeg0-dev python3 python3-venv
+apt-get install -y -q curl git python3 python3-venv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="/root/.local/bin:$PATH"
 
@@ -89,6 +89,14 @@ gcloud --quiet storage cp "$REPO_URI" /tmp/repo.tar.gz
 echo "$REPO_SHA256  /tmp/repo.tar.gz" | sha256sum --check --strict
 tar -xzf /tmp/repo.tar.gz -C /opt/imread-source
 cd /opt/imread-source
+
+scripts/install-libjpeg-turbo.sh
+LIBJPEG_TURBO_BACKEND=$(/opt/libjpeg-turbo/bin/djpeg -version 2>&1)
+export CPATH="/opt/libjpeg-turbo/include${CPATH:+:$CPATH}"
+export LD_LIBRARY_PATH="/opt/libjpeg-turbo/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBRARY_PATH="/opt/libjpeg-turbo/lib64${LIBRARY_PATH:+:$LIBRARY_PATH}"
+export PATH="/opt/libjpeg-turbo/bin:$PATH"
+export PKG_CONFIG_PATH="/opt/libjpeg-turbo/lib64/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 
 UV_PROJECT_ENVIRONMENT=/opt/imread-control uv sync --frozen --no-editable --no-group dev
 CONTROL=/opt/imread-control/bin/imread-benchmark
@@ -116,6 +124,7 @@ for dependency_group in "${GROUP_ARRAY[@]}"; do
         --project-root /opt/imread-source \
         --cache-root /opt/imread-environments \
         --python /usr/bin/python3 \
+        --native-backend "libjpeg-turbo=$LIBJPEG_TURBO_BACKEND" \
         --remote-store "$ENVIRONMENT_STORE" > "/opt/imread-job/environment-$group.json"
     ENVIRONMENT_DESCRIPTOR=$(python3 -c \
         "import json; print(json.load(open('/opt/imread-job/environment-$group.json'))['descriptor'])")

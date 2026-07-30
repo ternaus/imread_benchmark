@@ -75,7 +75,7 @@ cd "$REPO_ROOT"
 {
     git ls-files
     git ls-files --others --exclude-standard
-} | sort -u | grep -E '^(imread_benchmark/|pyproject\.toml$|uv\.lock$|README\.md$|LICENSE)' > "$TEMP_ROOT/source-files.txt"
+} | sort -u | grep -E '^(imread_benchmark/|scripts/|pyproject\.toml$|uv\.lock$|README\.md$|LICENSE)' > "$TEMP_ROOT/source-files.txt"
 
 RUNNER_REVISION=$(python3 - "$TEMP_ROOT/source-files.txt" <<'PY'
 import hashlib

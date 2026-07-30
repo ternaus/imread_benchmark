@@ -219,6 +219,7 @@ def environment_provision(
     project_root: Path = typer.Option(Path(), "--project-root", file_okay=False),
     cache_root: Path = typer.Option(..., "--cache-root", file_okay=False),
     python_executable: Path = typer.Option(Path(sys.executable), "--python", dir_okay=False),
+    native_backend: list[str] = typer.Option([], "--native-backend", help="Repeat NAME=VERSION for native libraries."),
     remote_store_uri: str | None = typer.Option(None, "--remote-store"),
     remote_prefix: str = typer.Option("environments", "--remote-prefix"),
 ) -> None:
@@ -229,6 +230,7 @@ def environment_provision(
         dependency_group=dependency_group,
         runner_revision=runner_revision,
         python_executable=python_executable,
+        native_backends=_parse_name_values(native_backend, option="--native-backend"),
     )
     store = GcloudObjectStore(remote_store_uri) if remote_store_uri is not None else None
     result = materialize_environment_cache(request, store=store, prefix=remote_prefix) if store is not None else None
@@ -337,6 +339,18 @@ def _parse_workloads(values: list[str]) -> dict[str, Path]:
             raise typer.BadParameter(f"workload directory does not exist: {path}")
         result[name] = path
     return result
+
+
+def _parse_name_values(values: list[str], *, option: str) -> tuple[tuple[str, str], ...]:
+    result: dict[str, str] = {}
+    for value in values:
+        name, separator, raw_value = value.partition("=")
+        if not separator or not name or not raw_value:
+            raise typer.BadParameter(f"each {option} must be NAME=VALUE")
+        if name in result:
+            raise typer.BadParameter(f"duplicate {option} name: {name}")
+        result[name] = raw_value
+    return tuple(sorted(result.items()))
 
 
 def _emit_json(payload: object) -> None:

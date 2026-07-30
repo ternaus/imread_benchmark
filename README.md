@@ -73,6 +73,11 @@ uv sync --frozen --group dev --extra mainstream
 uv run pytest -q
 ```
 
+These commands reproduce the committed dependency freeze. Before a new paper
+campaign, update to the latest stable compatible set once with `uv lock
+--upgrade`, run the full gate, and commit the new lock before any smoke. Do not
+upgrade between machines. See [Experiment design](docs/experiment_design.md).
+
 List decoder capability contracts:
 
 ```bash

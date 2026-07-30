@@ -60,6 +60,7 @@ class EnvironmentRequest:
     dependency_group: str
     runner_revision: str
     python_executable: Path
+    native_backends: tuple[tuple[str, str], ...] = ()
     uv_command: tuple[str, ...] = ("uv",)
     lock_sha256: str = field(init=False)
     project_sha256: str = field(init=False)
@@ -77,12 +78,14 @@ class EnvironmentRequest:
             raise ValueError("runner_revision must be a 40- or 64-character hexadecimal revision")
         if not self.uv_command:
             raise ValueError("uv_command must not be empty")
+        native_backends = _normalize_native_backends(self.native_backends)
         lock_sha256 = _sha256_file(project_root / "uv.lock")
         project_sha256 = _sha256_file(project_root / "pyproject.toml")
         python_identity, platform_tags = _probe_python_identity(python_executable)
         key_identity = {
             "dependency_group": self.dependency_group,
             "lock_sha256": lock_sha256,
+            "native_backends": dict(native_backends),
             "platform_tags": platform_tags,
             "project_sha256": project_sha256,
             "python": python_identity,
@@ -92,6 +95,7 @@ class EnvironmentRequest:
         object.__setattr__(self, "project_root", project_root)
         object.__setattr__(self, "cache_root", cache_root)
         object.__setattr__(self, "python_executable", python_executable)
+        object.__setattr__(self, "native_backends", native_backends)
         object.__setattr__(self, "lock_sha256", lock_sha256)
         object.__setattr__(self, "project_sha256", project_sha256)
         object.__setattr__(self, "python_identity", python_identity)
@@ -206,7 +210,7 @@ def _probe_installed_environment(
         python=_probe_string_mapping(document, "python"),
         platform_tags=_probe_string_tuple(document, "platform_tags"),
         distributions=_probe_distributions(document),
-        native_backends={},
+        native_backends=dict(request.native_backends),
     )
 
 
@@ -216,6 +220,7 @@ def _validate_descriptor_for_request(descriptor: EnvironmentDescriptor, request:
         and descriptor.lock_sha256 == request.lock_sha256
         and descriptor.project_sha256 == request.project_sha256
         and descriptor.runner_revision == request.runner_revision
+        and descriptor.native_backends == dict(request.native_backends)
         and descriptor.python == request.python_identity
         and descriptor.platform_tags == request.platform_tags
     )
@@ -305,6 +310,15 @@ def _probe_distributions(document: dict[str, Any]) -> tuple[tuple[str, str], ...
             raise TypeError("environment probe distribution must be a name/version pair")
         result.append((row[0], row[1]))
     return tuple(result)
+
+
+def _normalize_native_backends(values: tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
+    if any(len(row) != 2 or not row[0] or not row[1] for row in values):
+        raise ValueError("native_backends must contain non-empty name/version pairs")
+    names = [name for name, _ in values]
+    if len(names) != len(set(names)):
+        raise ValueError("native_backends contain duplicate names")
+    return tuple(sorted(values))
 
 
 def _probe_string_mapping(document: dict[str, Any], key: str) -> dict[str, str]:

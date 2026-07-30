@@ -22,6 +22,11 @@ jobs:
   test:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    env:
+      CPATH: /opt/libjpeg-turbo/include
+      LD_LIBRARY_PATH: /opt/libjpeg-turbo/lib64
+      LIBRARY_PATH: /opt/libjpeg-turbo/lib64
+      PKG_CONFIG_PATH: /opt/libjpeg-turbo/lib64/pkgconfig
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +40,7 @@ jobs:
       - name: Install native JPEG libraries
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libjpeg-turbo8-dev libturbojpeg0-dev
+          sudo ./scripts/install-libjpeg-turbo.sh
       - name: Install locked mainstream environment
         run: uv sync --frozen --group dev --extra mainstream --python ${{ matrix.python-version }}
       - name: Run complete suite

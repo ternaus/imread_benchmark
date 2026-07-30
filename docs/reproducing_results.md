@@ -4,6 +4,12 @@ The repository intentionally contains no historical result matrix. A publication
 artifact must start from a frozen set of schema-2 bundles produced by the named
 plan, dataset package, environments, source revision, and platforms.
 
+Reproduction uses the committed `uv.lock`; do not upgrade dependencies while
+reproducing a campaign. The one-time latest-version freeze happens before the
+first pilot and is documented in [Experiment design](experiment_design.md).
+Each environment descriptor records the lock hash, exact installed
+distributions, and declared native backend versions.
+
 ## Validate evidence
 
 ```bash
