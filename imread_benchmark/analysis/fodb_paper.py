@@ -1,0 +1,1044 @@
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import statistics
+import tarfile
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from imread_benchmark.analysis.canonical import RunBundleRecord, load_bundles
+from imread_benchmark.analysis.claims import ClaimScope, assert_claim_scope
+
+NATIVE_PLAN_ID = "6c746a5c21978f75c58c8c779f6628c2645a199b63489da9b9f1a9bb4f335c8f"
+MIXED_PLAN_ID = "e04f54dc177cadf86cb99a9fc34b950afb5b1abee5b46af040bafc8a4aa7910b"
+RUNNER_REVISION = "52a0bea5a2f44079883c9a41472b3add285955f2b471c37674ddd2fb5d4da6ff"
+
+PLAN_WORKLOADS = {NATIVE_PLAN_ID: "fodb-native", MIXED_PLAN_ID: "fodb-mixed"}
+EXPECTED_MACHINES = (
+    "c4-standard-16",
+    "c3d-standard-16",
+    "c4d-standard-16",
+    "c4a-standard-16",
+)
+PLATFORM_LABELS = {
+    "c4-standard-16": "Intel 8581C",
+    "c3d-standard-16": "AMD Zen 4",
+    "c4d-standard-16": "AMD Zen 5",
+    "c4a-standard-16": "Axion",
+}
+EXPECTED_REPETITIONS = tuple(range(5))
+EXPECTED_WORKERS = (0, 2, 4, 8)
+EXPECTED_ITEM_COUNTS = {"fodb-native": 324, "fodb-mixed": 1944}
+EXPECTED_TIMED_ITEM_COUNTS = {"fodb-native": 324, "fodb-mixed": 1668}
+CONTROLLED_THREADS = {"opencv": 1, "pyvips": 1, "torchvision": 1}
+PRIMARY_DECODERS = ("pillow", "opencv", "simplejpeg", "torchvision")
+PRACTICAL_MARGIN = 0.05
+
+
+class PaperAssetError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class Measurement:
+    workload: str
+    machine_type: str
+    protocol: str
+    decoder: str
+    requested_threads: int | None
+    workers: int | None
+    repetition: int
+    images_per_second: float
+    run_key: str
+    bundle_id: str
+
+    @property
+    def configuration_label(self) -> str:
+        thread_label = "default" if self.requested_threads is None else str(self.requested_threads)
+        return f"{self.decoder}[threads={thread_label}]"
+
+
+@dataclass(frozen=True, slots=True)
+class Aggregate:
+    workload: str
+    machine_type: str
+    protocol: str
+    decoder: str
+    requested_threads: int | None
+    workers: int | None
+    repetitions: tuple[int, ...]
+    raw_run_means: tuple[float, ...]
+    mean: float
+    sample_std: float
+
+    @property
+    def configuration_label(self) -> str:
+        thread_label = "default" if self.requested_threads is None else str(self.requested_threads)
+        return f"{self.decoder}[threads={thread_label}]"
+
+
+def build_paper_assets(*, artifact_root: Path, package_path: Path, output_root: Path) -> dict[str, Any]:
+    records = tuple(record for record in load_bundles(artifact_root) if record.config.get("plan_id") in PLAN_WORKLOADS)
+    package = _read_object(package_path)
+    measurements = _validate_and_measure(records, package)
+    aggregates = _aggregate(measurements)
+    manifests = _load_package_manifests(package_path, package)
+    support_item_ids = _support_item_ids(records)
+    workload_descriptors = _workload_descriptors(package, manifests, support_item_ids)
+    decisions = _decision_rows(aggregates)
+    pillow_rows = _pillow_rows(aggregates)
+    thread_rows = _thread_rows(aggregates)
+    worker_transfer_rows = _worker_transfer_rows(aggregates)
+    sections = {
+        "decisions": decisions,
+        "pillow_migration": pillow_rows,
+        "thread_controls": thread_rows,
+        "worker_transfer": worker_transfer_rows,
+        "workloads": workload_descriptors,
+    }
+    evidence = _evidence_document(records, measurements, aggregates, sections)
+
+    generated_dir = output_root / "generated"
+    figures_dir = output_root / "figures"
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(generated_dir / "fodb_evidence.json", evidence)
+    _write_text(generated_dir / "fodb_results_summary.md", _summary_markdown(evidence))
+    _write_text(generated_dir / "table_fodb_workloads.tex", _workload_table(workload_descriptors))
+    _write_text(generated_dir / "table_fodb_provenance.tex", _provenance_table(workload_descriptors))
+    _write_text(generated_dir / "table_fodb_decisions.tex", _decision_table(decisions))
+    _write_text(generated_dir / "table_fodb_pillow.tex", _pillow_table(pillow_rows))
+    _write_text(
+        generated_dir / "table_fodb_worker_transfer.tex",
+        _worker_transfer_table(worker_transfer_rows),
+    )
+    _write_text(generated_dir / "table_fodb_coverage.tex", _coverage_table(evidence))
+    _write_text(generated_dir / "table_fodb_versions.tex", _versions_table(records))
+    _plot_workloads(package, manifests, support_item_ids, figures_dir / "fig_fodb_workload_distributions.pdf")
+    _plot_worker_scaling(aggregates, figures_dir / "fig_fodb_worker_scaling.pdf")
+    _plot_protocol_regret(decisions, figures_dir / "fig_fodb_protocol_regret.pdf")
+    return evidence
+
+
+def _validate_and_measure(records: tuple[RunBundleRecord, ...], package: dict[str, Any]) -> tuple[Measurement, ...]:
+    expected_total = len(PLAN_WORKLOADS) * len(EXPECTED_MACHINES) * 75 * len(EXPECTED_REPETITIONS)
+    if len(records) != expected_total:
+        raise PaperAssetError(f"expected {expected_total} evidence bundles, found {len(records)}")
+
+    decode_records = tuple(record for record in records if record.config.get("protocol_id") == "decode-memory")
+    loader_records = tuple(record for record in records if record.config.get("protocol_id") == "loader-supply")
+    assert_claim_scope(decode_records, ClaimScope.DECODER_CAPACITY)
+    assert_claim_scope(loader_records, ClaimScope.LOADER_SUPPLY)
+
+    package_workloads = _required_object(package, "workloads")
+    manifest_ids = {
+        workload: _required_string(_required_object(package_workloads, workload), "manifest_id")
+        for workload in EXPECTED_ITEM_COUNTS
+    }
+    measurements: list[Measurement] = []
+    cell_counts: Counter[tuple[str, str, str]] = Counter()
+    configuration_repetitions: dict[tuple[str, str, str], set[int]] = defaultdict(set)
+    for record in records:
+        measurement = _measurement(record, manifest_ids)
+        measurements.append(measurement)
+        cell_counts[(measurement.workload, measurement.machine_type, measurement.protocol)] += 1
+        config_id = _required_string(record.config, "config_id")
+        configuration_repetitions[(measurement.workload, measurement.machine_type, config_id)].add(
+            measurement.repetition,
+        )
+
+    _validate_matrix_counts(cell_counts, configuration_repetitions)
+    return tuple(measurements)
+
+
+def _measurement(record: RunBundleRecord, manifest_ids: dict[str, str]) -> Measurement:
+    config = record.config
+    plan_id = _required_string(config, "plan_id")
+    workload = PLAN_WORKLOADS[plan_id]
+    machine_type = _required_string(_required_object(record.platform, "identity"), "machine_type")
+    if machine_type not in EXPECTED_MACHINES:
+        raise PaperAssetError(f"unexpected machine type {machine_type!r}")
+    checks = (
+        (config.get("runner_revision") == RUNNER_REVISION, "unexpected runner revision"),
+        (config.get("output_contract") == "normalized-rgb", "unexpected output contract"),
+        (record.dataset.get("workload_id") == workload, "plan/workload mismatch"),
+        (record.dataset.get("manifest_id") == manifest_ids[workload], "manifest mismatch"),
+        (not record.failures, "timed failures are present"),
+        (record.summary.get("status") == "complete", "incomplete summary"),
+        (len(record.samples) == 1, "expected one timed traversal"),
+    )
+    for valid, message in checks:
+        if not valid:
+            raise PaperAssetError(f"{message} in {record.run_key}")
+    ordered_items = record.dataset.get("ordered_item_ids")
+    if not isinstance(ordered_items, list) or len(ordered_items) != EXPECTED_TIMED_ITEM_COUNTS[workload]:
+        raise PaperAssetError(f"unexpected timed support population for {workload} in {record.run_key}")
+    sample = record.samples[0]
+    return Measurement(
+        workload=workload,
+        machine_type=machine_type,
+        protocol=_required_string(config, "protocol_id"),
+        decoder=_required_string(config, "decoder_id"),
+        requested_threads=_optional_int(config, "requested_threads"),
+        workers=_optional_int(config, "num_workers"),
+        repetition=_required_int(config, "repetition"),
+        images_per_second=sample.items_processed / sample.elapsed_seconds,
+        run_key=record.run_key,
+        bundle_id=record.bundle_id,
+    )
+
+
+def _validate_matrix_counts(
+    cell_counts: Counter[tuple[str, str, str]],
+    configuration_repetitions: dict[tuple[str, str, str], set[int]],
+) -> None:
+    for workload in EXPECTED_ITEM_COUNTS:
+        for machine_type in EXPECTED_MACHINES:
+            if cell_counts[(workload, machine_type, "decode-memory")] != 75:
+                raise PaperAssetError(f"incomplete decode-memory matrix for {workload}/{machine_type}")
+            if cell_counts[(workload, machine_type, "loader-supply")] != 300:
+                raise PaperAssetError(f"incomplete loader-supply matrix for {workload}/{machine_type}")
+    expected_repetitions = set(EXPECTED_REPETITIONS)
+    if any(repetitions != expected_repetitions for repetitions in configuration_repetitions.values()):
+        raise PaperAssetError("at least one configuration lacks the five repetition blocks")
+
+
+def _aggregate(measurements: tuple[Measurement, ...]) -> tuple[Aggregate, ...]:
+    grouped: dict[tuple[object, ...], list[Measurement]] = defaultdict(list)
+    for measurement in measurements:
+        key = (
+            measurement.workload,
+            measurement.machine_type,
+            measurement.protocol,
+            measurement.decoder,
+            measurement.requested_threads,
+            measurement.workers,
+        )
+        grouped[key].append(measurement)
+    aggregates: list[Aggregate] = []
+    for aggregate_key, rows in grouped.items():
+        ordered = sorted(rows, key=lambda row: row.repetition)
+        repetitions = tuple(row.repetition for row in ordered)
+        if repetitions != EXPECTED_REPETITIONS:
+            raise PaperAssetError(f"aggregate has repetition blocks {repetitions}, expected {EXPECTED_REPETITIONS}")
+        raw = tuple(row.images_per_second for row in ordered)
+        workload, machine_type, protocol, decoder, requested_threads, workers = aggregate_key
+        aggregates.append(
+            Aggregate(
+                workload=str(workload),
+                machine_type=str(machine_type),
+                protocol=str(protocol),
+                decoder=str(decoder),
+                requested_threads=requested_threads if isinstance(requested_threads, int) else None,
+                workers=workers if isinstance(workers, int) else None,
+                repetitions=repetitions,
+                raw_run_means=raw,
+                mean=statistics.fmean(raw),
+                sample_std=statistics.stdev(raw),
+            ),
+        )
+    return tuple(sorted(aggregates, key=_aggregate_sort_key))
+
+
+def _aggregate_sort_key(row: Aggregate) -> tuple[str, ...]:
+    return (
+        row.workload,
+        row.machine_type,
+        row.protocol,
+        row.decoder,
+        str(row.requested_threads),
+        str(row.workers),
+    )
+
+
+def _is_controlled(row: Aggregate) -> bool:
+    return row.requested_threads == CONTROLLED_THREADS.get(row.decoder)
+
+
+def _decision_rows(aggregates: tuple[Aggregate, ...]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for workload in EXPECTED_ITEM_COUNTS:
+        for machine_type in EXPECTED_MACHINES:
+            block = tuple(
+                row
+                for row in aggregates
+                if row.workload == workload and row.machine_type == machine_type and _is_controlled(row)
+            )
+            decode = tuple(row for row in block if row.protocol == "decode-memory")
+            loader = tuple(row for row in block if row.protocol == "loader-supply")
+            if len(decode) != 12 or len(loader) != 48:
+                raise PaperAssetError(f"controlled-thread block is incomplete for {workload}/{machine_type}")
+            decode_leader = _best(decode)
+            peak_by_decoder = {
+                decoder: _best(tuple(row for row in loader if row.decoder == decoder)) for decoder in _decoders(decode)
+            }
+            loader_leader = _best(tuple(peak_by_decoder.values()))
+            selected_loader = peak_by_decoder[decode_leader.decoder]
+            aggregate_regret = 1 - selected_loader.mean / loader_leader.mean
+            paired_regret = tuple(
+                1 - selected / leader
+                for selected, leader in zip(selected_loader.raw_run_means, loader_leader.raw_run_means, strict=True)
+            )
+            decode_ranks = _ranks({row.decoder: row.mean for row in decode})
+            loader_ranks = _ranks({decoder: row.mean for decoder, row in peak_by_decoder.items()})
+            rank_correlation = statistics.correlation(
+                [decode_ranks[decoder] for decoder in sorted(decode_ranks)],
+                [loader_ranks[decoder] for decoder in sorted(loader_ranks)],
+            )
+            threshold = loader_leader.mean * (1 - PRACTICAL_MARGIN)
+            tier = [
+                {
+                    "decoder": row.decoder,
+                    "mean_images_per_second": row.mean,
+                    "workers": row.workers,
+                }
+                for row in sorted(peak_by_decoder.values(), key=lambda item: (-item.mean, item.configuration_label))
+                if row.mean >= threshold
+            ]
+            rows.append(
+                {
+                    "aggregate_regret_percent": aggregate_regret * 100,
+                    "decode_leader": decode_leader.decoder,
+                    "decode_leader_images_per_second": decode_leader.mean,
+                    "loader_leader": loader_leader.decoder,
+                    "loader_leader_images_per_second": loader_leader.mean,
+                    "loader_leader_workers": loader_leader.workers,
+                    "machine_type": machine_type,
+                    "paired_regret_percent": [value * 100 for value in paired_regret],
+                    "platform": PLATFORM_LABELS[machine_type],
+                    "rank_correlation": rank_correlation,
+                    "selected_decoder_loader_workers": selected_loader.workers,
+                    "strict_leader_match": decode_leader.decoder == loader_leader.decoder,
+                    "top_tier": tier,
+                    "workload": workload,
+                },
+            )
+    return rows
+
+
+def _pillow_rows(aggregates: tuple[Aggregate, ...]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for workload in EXPECTED_ITEM_COUNTS:
+        for machine_type in EXPECTED_MACHINES:
+            peaks: dict[str, Aggregate] = {}
+            for decoder in PRIMARY_DECODERS:
+                candidates = tuple(
+                    row
+                    for row in aggregates
+                    if row.workload == workload
+                    and row.machine_type == machine_type
+                    and row.protocol == "loader-supply"
+                    and row.decoder == decoder
+                    and _is_controlled(row)
+                )
+                peaks[decoder] = _best(candidates)
+            pillow = peaks["pillow"]
+            rows.append(
+                {
+                    "gains_percent": {
+                        decoder: (peaks[decoder].mean / pillow.mean - 1) * 100
+                        for decoder in PRIMARY_DECODERS
+                        if decoder != "pillow"
+                    },
+                    "machine_type": machine_type,
+                    "peak_workers": {decoder: peak.workers for decoder, peak in peaks.items()},
+                    "platform": PLATFORM_LABELS[machine_type],
+                    "workload": workload,
+                },
+            )
+    return rows
+
+
+def _thread_rows(aggregates: tuple[Aggregate, ...]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for workload in EXPECTED_ITEM_COUNTS:
+        for machine_type in EXPECTED_MACHINES:
+            for decoder in sorted(CONTROLLED_THREADS):
+                decode_default = _only(aggregates, (workload, machine_type, "decode-memory", decoder, None, None))
+                decode_one = _only(aggregates, (workload, machine_type, "decode-memory", decoder, 1, None))
+                loader_default = _best(
+                    tuple(
+                        row
+                        for row in aggregates
+                        if row.workload == workload
+                        and row.machine_type == machine_type
+                        and row.protocol == "loader-supply"
+                        and row.decoder == decoder
+                        and row.requested_threads is None
+                    ),
+                )
+                loader_one = _best(
+                    tuple(
+                        row
+                        for row in aggregates
+                        if row.workload == workload
+                        and row.machine_type == machine_type
+                        and row.protocol == "loader-supply"
+                        and row.decoder == decoder
+                        and row.requested_threads == 1
+                    ),
+                )
+                rows.append(
+                    {
+                        "decode_default_vs_one_percent": (decode_default.mean / decode_one.mean - 1) * 100,
+                        "decoder": decoder,
+                        "loader_default_vs_one_percent": (loader_default.mean / loader_one.mean - 1) * 100,
+                        "machine_type": machine_type,
+                        "platform": PLATFORM_LABELS[machine_type],
+                        "workload": workload,
+                    },
+                )
+    return rows
+
+
+def _worker_transfer_rows(aggregates: tuple[Aggregate, ...]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for machine_type in EXPECTED_MACHINES:
+        peaks: dict[str, dict[str, Aggregate]] = {}
+        for workload in EXPECTED_ITEM_COUNTS:
+            peaks[workload] = {
+                decoder: _best(
+                    tuple(
+                        row
+                        for row in aggregates
+                        if row.workload == workload
+                        and row.machine_type == machine_type
+                        and row.protocol == "loader-supply"
+                        and row.decoder == decoder
+                        and _is_controlled(row)
+                    ),
+                )
+                for decoder in sorted({row.decoder for row in aggregates if _is_controlled(row)})
+            }
+        changed = [
+            decoder
+            for decoder in sorted(peaks["fodb-native"])
+            if peaks["fodb-native"][decoder].workers != peaks["fodb-mixed"][decoder].workers
+        ]
+        rows.append(
+            {
+                "changed_decoders": changed,
+                "machine_type": machine_type,
+                "mixed_peak_worker_counts": dict(
+                    sorted(Counter(row.workers for row in peaks["fodb-mixed"].values()).items()),
+                ),
+                "native_peak_worker_counts": dict(
+                    sorted(Counter(row.workers for row in peaks["fodb-native"].values()).items()),
+                ),
+                "platform": PLATFORM_LABELS[machine_type],
+            },
+        )
+    return rows
+
+
+def _evidence_document(
+    records: tuple[RunBundleRecord, ...],
+    measurements: tuple[Measurement, ...],
+    aggregates: tuple[Aggregate, ...],
+    sections: dict[str, Any],
+) -> dict[str, Any]:
+    run_keys = sorted(measurement.run_key for measurement in measurements)
+    bundle_ids = sorted(measurement.bundle_id for measurement in measurements)
+    return {
+        "aggregates": [_aggregate_dict(row) for row in aggregates],
+        "coverage": {
+            "committed_evidence_bundles": len(records),
+            "expected_repetitions_per_configuration": len(EXPECTED_REPETITIONS),
+            "manifest_items": EXPECTED_ITEM_COUNTS,
+            "timed_common_support_items": EXPECTED_TIMED_ITEM_COUNTS,
+            "timed_failure_bundles": sum(bool(record.failures) for record in records),
+        },
+        "decisions": sections["decisions"],
+        "matrix": {
+            "machine_types": list(EXPECTED_MACHINES),
+            "plan_ids": {workload: plan_id for plan_id, workload in PLAN_WORKLOADS.items()},
+            "practical_margin_percent": PRACTICAL_MARGIN * 100,
+            "runner_revision": RUNNER_REVISION,
+            "worker_grid": list(EXPECTED_WORKERS),
+        },
+        "pillow_migration": sections["pillow_migration"],
+        "provenance": {
+            "bundle_ids_sha256": _sequence_digest(bundle_ids),
+            "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "run_keys": run_keys,
+            "run_keys_sha256": _sequence_digest(run_keys),
+        },
+        "schema_version": "1.0",
+        "thread_controls": sections["thread_controls"],
+        "worker_transfer": sections["worker_transfer"],
+        "workloads": sections["workloads"],
+    }
+
+
+def _aggregate_dict(row: Aggregate) -> dict[str, Any]:
+    return {
+        "decoder": row.decoder,
+        "machine_type": row.machine_type,
+        "mean_images_per_second": row.mean,
+        "protocol": row.protocol,
+        "raw_run_means": list(row.raw_run_means),
+        "repetitions": list(row.repetitions),
+        "requested_threads": row.requested_threads,
+        "sample_std_images_per_second": row.sample_std,
+        "workers": row.workers,
+        "workload": row.workload,
+    }
+
+
+def _load_package_manifests(package_path: Path, package: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    archive = _required_object(package, "archive")
+    archive_path = package_path.parent / _required_string(archive, "file")
+    manifests: dict[str, list[dict[str, Any]]] = {}
+    try:
+        with tarfile.open(archive_path) as tar:
+            for workload in EXPECTED_ITEM_COUNTS:
+                source = tar.extractfile(f"manifests/{workload}.json")
+                if source is None:
+                    raise PaperAssetError(f"package archive has no manifest for {workload}")
+                document = json.load(source)
+                if not isinstance(document, dict):
+                    raise PaperAssetError(f"manifest for {workload} must be an object")
+                raw_items = _required_list(document, "items")
+                if not all(isinstance(item, dict) for item in raw_items):
+                    raise PaperAssetError(f"manifest for {workload} contains a non-object item")
+                manifests[workload] = raw_items
+    except (OSError, tarfile.TarError, json.JSONDecodeError) as exc:
+        raise PaperAssetError(f"cannot read package manifests from {archive_path}: {exc}") from exc
+    return manifests
+
+
+def _support_item_ids(records: tuple[RunBundleRecord, ...]) -> dict[str, set[str]]:
+    populations: dict[str, set[str]] = {}
+    for record in records:
+        workload = _required_string(record.dataset, "workload_id")
+        raw_items = record.dataset.get("ordered_item_ids")
+        if not isinstance(raw_items, list) or not all(isinstance(item, str) for item in raw_items):
+            raise PaperAssetError(f"bundle {record.run_key} has invalid support item IDs")
+        item_ids = set(raw_items)
+        observed = populations.setdefault(workload, item_ids)
+        if observed != item_ids:
+            raise PaperAssetError(f"timed support population differs across {workload} bundles")
+    if set(populations) != set(EXPECTED_ITEM_COUNTS):
+        raise PaperAssetError("timed support populations do not cover both FODB workloads")
+    return populations
+
+
+def _workload_descriptors(
+    package: dict[str, Any],
+    manifests: dict[str, list[dict[str, Any]]],
+    support_item_ids: dict[str, set[str]],
+) -> list[dict[str, Any]]:
+    package_items = _required_list(_required_object(package, "provenance"), "items")
+    by_sha = {_required_string(item, "jpeg_sha256"): item for item in package_items if isinstance(item, dict)}
+    rows: list[dict[str, Any]] = []
+    for workload in EXPECTED_ITEM_COUNTS:
+        manifest = manifests[workload]
+        timed_manifest = [item for item in manifest if _required_string(item, "item_id") in support_item_ids[workload]]
+        excluded_manifest = [
+            item for item in manifest if _required_string(item, "item_id") not in support_item_ids[workload]
+        ]
+        selected = [by_sha[_required_string(item, "sha256")] for item in timed_manifest]
+        excluded = [by_sha[_required_string(item, "sha256")] for item in excluded_manifest]
+        megapixels = [_jpeg_number(item, "megapixels") for item in selected]
+        compressed_bytes = [_required_int(item, "jpeg_bytes") for item in selected]
+        bits_per_pixel = [_required_number(item, "bits_per_pixel") for item in selected]
+        quality = [_jpeg_number(item, "quality_estimate") for item in selected]
+        progressive = sum(bool(_required_object(item, "jpeg").get("progressive")) for item in selected)
+        provenance = Counter(_required_string(item, "provenance") for item in selected)
+        subsampling = Counter(_required_string(_required_object(item, "jpeg"), "subsampling") for item in selected)
+        rows.append(
+            {
+                "bits_per_pixel": _distribution(bits_per_pixel),
+                "compressed_bytes": _distribution(compressed_bytes),
+                "estimated_quality": _distribution(quality),
+                "excluded_items": len(excluded),
+                "excluded_profile": _excluded_profile(excluded),
+                "items": len(selected),
+                "manifest_items": len(manifest),
+                "megapixels": _distribution(megapixels),
+                "progressive_items": progressive,
+                "provenance": dict(sorted(provenance.items())),
+                "subsampling": dict(sorted(subsampling.items())),
+                "total_compressed_bytes": sum(compressed_bytes),
+                "workload": workload,
+            },
+        )
+    return rows
+
+
+def _excluded_profile(items: list[dict[str, Any]]) -> dict[str, Any]:
+    if not items:
+        return {"estimated_quality": {}, "progressive_items": 0, "provenance": {}}
+    return {
+        "estimated_quality": dict(sorted(Counter(_jpeg_number(item, "quality_estimate") for item in items).items())),
+        "progressive_items": sum(bool(_required_object(item, "jpeg").get("progressive")) for item in items),
+        "provenance": dict(sorted(Counter(_required_string(item, "provenance") for item in items).items())),
+    }
+
+
+def _distribution(values: list[float] | list[int]) -> dict[str, float | int]:
+    ordered = sorted(float(value) for value in values)
+    return {
+        "maximum": ordered[-1],
+        "median": statistics.median(ordered),
+        "minimum": ordered[0],
+        "q10": _linear_quantile(ordered, 0.10),
+        "q90": _linear_quantile(ordered, 0.90),
+    }
+
+
+def _linear_quantile(ordered: list[float], probability: float) -> float:
+    position = (len(ordered) - 1) * probability
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] * (1 - fraction) + ordered[upper] * fraction
+
+
+def _best(rows: tuple[Aggregate, ...]) -> Aggregate:
+    if not rows:
+        raise PaperAssetError("cannot select a best configuration from an empty set")
+    return min(rows, key=lambda row: (-row.mean, row.configuration_label, row.workers or -1))
+
+
+def _decoders(rows: tuple[Aggregate, ...]) -> tuple[str, ...]:
+    return tuple(sorted({row.decoder for row in rows}))
+
+
+def _ranks(values: dict[str, float]) -> dict[str, float]:
+    ordered = sorted(values.items(), key=lambda item: (-item[1], item[0]))
+    result: dict[str, float] = {}
+    start = 0
+    while start < len(ordered):
+        end = start + 1
+        while end < len(ordered) and ordered[end][1] == ordered[start][1]:
+            end += 1
+        rank = (start + 1 + end) / 2
+        for key, _ in ordered[start:end]:
+            result[key] = rank
+        start = end
+    return result
+
+
+AggregateKey = tuple[str, str, str, str, int | None, int | None]
+
+
+def _only(rows: tuple[Aggregate, ...], key: AggregateKey) -> Aggregate:
+    selected = tuple(
+        row
+        for row in rows
+        if (
+            row.workload,
+            row.machine_type,
+            row.protocol,
+            row.decoder,
+            row.requested_threads,
+            row.workers,
+        )
+        == key
+    )
+    if len(selected) != 1:
+        raise PaperAssetError(f"expected one aggregate, found {len(selected)}")
+    return selected[0]
+
+
+def _summary_markdown(evidence: dict[str, Any]) -> str:
+    lines = [
+        "# Generated FODB evidence",
+        "",
+        "All values below are generated from the two exact evidence plan IDs in `fodb_evidence.json`.",
+        "The practical-equivalence margin is 5%; it is a reporting policy, not a hypothesis test.",
+        "",
+        "## Workloads",
+        "",
+        "| Workload | Timed / manifest | Median MP | Median compressed MiB | Median estimated quality | Progressive |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    lines.extend(
+        (
+            f"| {row['workload']} | {row['items']} / {row['manifest_items']} | "
+            f"{row['megapixels']['median']:.3f} | "
+            f"{row['compressed_bytes']['median'] / 2**20:.3f} | {row['estimated_quality']['median']:.0f} | "
+            f"{row['progressive_items']} |"
+        )
+        for row in evidence["workloads"]
+    )
+    lines.extend(
+        [
+            "",
+            "## Protocol decision",
+            "",
+            "| Workload | Platform | Decode leader | Loader leader | Workers | Regret | Spearman rho | 5% tier |",
+            "| --- | --- | --- | --- | ---: | ---: | ---: | --- |",
+        ],
+    )
+    for row in evidence["decisions"]:
+        tier = ", ".join(item["decoder"] for item in row["top_tier"])
+        lines.append(
+            f"| {row['workload']} | {row['platform']} | {row['decode_leader']} | {row['loader_leader']} | "
+            f"{row['loader_leader_workers']} | {row['aggregate_regret_percent']:.2f}% | "
+            f"{row['rank_correlation']:.2f} | {tier} |",
+        )
+    lines.extend(
+        [
+            "",
+            "## Pillow migration",
+            "",
+            "| Workload | Platform | OpenCV | simplejpeg | torchvision |",
+            "| --- | --- | ---: | ---: | ---: |",
+        ],
+    )
+    for row in evidence["pillow_migration"]:
+        gains = row["gains_percent"]
+        lines.append(
+            f"| {row['workload']} | {row['platform']} | {gains['opencv']:+.1f}% | "
+            f"{gains['simplejpeg']:+.1f}% | {gains['torchvision']:+.1f}% |",
+        )
+    lines.extend(
+        [
+            "",
+            "## Peak-worker transfer",
+            "",
+            "| Platform | Native peak-worker counts | Mixed peak-worker counts | Changed decoders |",
+            "| --- | --- | --- | --- |",
+        ],
+    )
+    for row in evidence["worker_transfer"]:
+        native = ", ".join(f"w={key}: {value}" for key, value in row["native_peak_worker_counts"].items())
+        mixed = ", ".join(f"w={key}: {value}" for key, value in row["mixed_peak_worker_counts"].items())
+        lines.append(f"| {row['platform']} | {native} | {mixed} | {', '.join(row['changed_decoders']) or 'none'} |")
+    return "\n".join(lines) + "\n"
+
+
+def _workload_table(rows: list[dict[str, Any]]) -> str:
+    body = []
+    for row in rows:
+        line = (
+            f"{_latex_workload(row['workload'])} & {row['items']:,}/{row['manifest_items']:,} & "
+            f"{row['megapixels']['median']:.2f} [{row['megapixels']['q10']:.2f}, {row['megapixels']['q90']:.2f}] & "
+            f"{row['compressed_bytes']['median'] / 2**20:.2f} & {row['bits_per_pixel']['median']:.2f} & "
+            f"{row['estimated_quality']['median']:.0f} & {row['progressive_items']:,} "
+        )
+        body.append(line)
+    return (r"\\" + "\n").join(body) + "\n"
+
+
+def _decision_table(rows: list[dict[str, Any]]) -> str:
+    body = []
+    for row in rows:
+        line = (
+            f"{_latex_workload(row['workload'])} & {row['platform']} & \\texttt{{{row['decode_leader']}}} & "
+            f"\\texttt{{{row['loader_leader']}}} ($w={row['loader_leader_workers']}$) & "
+            f"{row['aggregate_regret_percent']:.1f}\\% & {row['rank_correlation']:.2f} "
+        )
+        body.append(line)
+    return (r"\\" + "\n").join(body) + "\n"
+
+
+def _provenance_table(rows: list[dict[str, Any]]) -> str:
+    body = []
+    for row in rows:
+        counts = row["provenance"]
+        body.append(
+            f"{_latex_workload(row['workload'])} & {counts.get('orig', 0):,} & "
+            f"{counts.get('facebook', 0):,} & {counts.get('instagram', 0):,} & "
+            f"{counts.get('telegram', 0):,} & {counts.get('twitter', 0):,} & "
+            f"{counts.get('whatsapp', 0):,} ",
+        )
+    return (r"\\" + "\n").join(body) + "\n"
+
+
+def _pillow_table(rows: list[dict[str, Any]]) -> str:
+    body = []
+    for row in rows:
+        gains = row["gains_percent"]
+        line = (
+            f"{_latex_workload(row['workload'])} & {row['platform']} & {gains['opencv']:+.1f}\\% & "
+            f"{gains['simplejpeg']:+.1f}\\% & {gains['torchvision']:+.1f}\\% "
+        )
+        body.append(line)
+    return (r"\\" + "\n").join(body) + "\n"
+
+
+def _worker_transfer_table(rows: list[dict[str, Any]]) -> str:
+    body = []
+    for row in rows:
+        native = row["native_peak_worker_counts"]
+        mixed = row["mixed_peak_worker_counts"]
+        changed = ", ".join(f"\\texttt{{{decoder}}}" for decoder in row["changed_decoders"]) or "none"
+        body.append(
+            f"{row['platform']} & {native.get(0, 0)} / {native.get(8, 0)} & "
+            f"{mixed.get(0, 0)} / {mixed.get(8, 0)} & {len(row['changed_decoders'])}/12 & {changed} ",
+        )
+    return (r"\\" + "\n").join(body) + "\n"
+
+
+def _coverage_table(evidence: dict[str, Any]) -> str:
+    coverage = evidence["coverage"]
+    native = (
+        f"FODB-native & {coverage['timed_common_support_items']['fodb-native']:,} / "
+        f"{coverage['manifest_items']['fodb-native']:,} "
+        "& 0 & 1,500 "
+    )
+    mixed = (
+        f"FODB-mixed & {coverage['timed_common_support_items']['fodb-mixed']:,} / "
+        f"{coverage['manifest_items']['fodb-mixed']:,} "
+        "& 0 & 1,500 "
+    )
+    return native + r"\\" + "\n" + mixed + "\n"
+
+
+def _versions_table(records: tuple[RunBundleRecord, ...]) -> str:
+    wanted = {
+        "ajpegli",
+        "imagecodecs",
+        "imageio",
+        "jpeg4py",
+        "kornia-rs",
+        "opencv-python-headless",
+        "pillow",
+        "pyvips",
+        "scikit-image",
+        "simplejpeg",
+        "torch",
+        "torchvision",
+        "pyturbojpeg",
+    }
+    versions: dict[str, set[str]] = defaultdict(set)
+    for record in records:
+        distributions = record.environment.get("distributions")
+        if not isinstance(distributions, list):
+            raise PaperAssetError("environment distributions are missing")
+        for distribution in distributions:
+            if isinstance(distribution, dict) and distribution.get("name") in wanted:
+                versions[str(distribution["name"])].add(str(distribution.get("version")))
+    if set(versions) != wanted or any(len(values) != 1 for values in versions.values()):
+        raise PaperAssetError("decoder package versions differ across evidence environments")
+    return (r"\\" + "\n").join(
+        f"\\texttt{{{name}}} & \\texttt{{{next(iter(versions[name]))}}} " for name in sorted(versions)
+    ) + "\n"
+
+
+def _plot_workloads(
+    package: dict[str, Any],
+    manifests: dict[str, list[dict[str, Any]]],
+    support_item_ids: dict[str, set[str]],
+    destination: Path,
+) -> None:
+    plt = _pyplot()
+    package_items = _required_list(_required_object(package, "provenance"), "items")
+    by_sha = {_required_string(item, "jpeg_sha256"): item for item in package_items if isinstance(item, dict)}
+    data: dict[str, list[dict[str, Any]]] = {}
+    for workload, manifest in manifests.items():
+        selected = [item for item in manifest if _required_string(item, "item_id") in support_item_ids[workload]]
+        data[workload.replace("fodb-", "FODB-")] = [by_sha[_required_string(item, "sha256")] for item in selected]
+    extractors = (
+        ("Megapixels", lambda item: _jpeg_number(item, "megapixels"), True),
+        ("Compressed size (MiB)", lambda item: _required_int(item, "jpeg_bytes") / 2**20, True),
+        ("Bits per pixel", lambda item: _required_number(item, "bits_per_pixel"), False),
+        ("Estimated quality", lambda item: _jpeg_number(item, "quality_estimate"), False),
+    )
+    figure, axes = plt.subplots(2, 2, figsize=(7.1, 5.0), constrained_layout=True)
+    for axis, (label, extractor, logarithmic) in zip(axes.flat, extractors, strict=True):
+        for workload, workload_items in data.items():
+            values = sorted(extractor(item) for item in workload_items)
+            probabilities = [(index + 1) / len(values) for index in range(len(values))]
+            axis.step(values, probabilities, where="post", label=workload)
+        if logarithmic:
+            axis.set_xscale("log")
+        axis.set_xlabel(label)
+        axis.set_ylabel("ECDF")
+        axis.grid(alpha=0.2)
+    axes[0, 0].legend(frameon=False)
+    figure.savefig(destination)
+    plt.close(figure)
+
+
+def _plot_worker_scaling(aggregates: tuple[Aggregate, ...], destination: Path) -> None:
+    plt = _pyplot()
+    colors = dict(zip(PRIMARY_DECODERS, ("#4C78A8", "#F58518", "#54A24B", "#B279A2"), strict=True))
+    figure, axes = plt.subplots(4, 2, figsize=(7.1, 8.4), sharex=True, constrained_layout=True)
+    for row_index, machine_type in enumerate(EXPECTED_MACHINES):
+        for column_index, workload in enumerate(EXPECTED_ITEM_COUNTS):
+            axis = axes[row_index, column_index]
+            for decoder_index, decoder in enumerate(PRIMARY_DECODERS):
+                curve = [
+                    _only(
+                        aggregates,
+                        (
+                            workload,
+                            machine_type,
+                            "loader-supply",
+                            decoder,
+                            CONTROLLED_THREADS.get(decoder),
+                            workers,
+                        ),
+                    )
+                    for workers in EXPECTED_WORKERS
+                ]
+                paired_ratios = [
+                    tuple(
+                        value / baseline
+                        for value, baseline in zip(point.raw_run_means, curve[0].raw_run_means, strict=True)
+                    )
+                    for point in curve
+                ]
+                means = [statistics.fmean(values) for values in paired_ratios]
+                axis.plot(EXPECTED_WORKERS, means, marker="o", color=colors[decoder], label=decoder)
+                jitter = (decoder_index - 1.5) * 0.06
+                for workers, values in zip(EXPECTED_WORKERS, paired_ratios, strict=True):
+                    axis.scatter(
+                        [workers + jitter] * len(values),
+                        values,
+                        color=colors[decoder],
+                        alpha=0.28,
+                        s=9,
+                        linewidths=0,
+                    )
+            axis.axhline(1, color="0.45", linewidth=0.8, linestyle="--")
+            axis.grid(alpha=0.18)
+            axis.set_title(f"{PLATFORM_LABELS[machine_type]} — {workload}", fontsize=9)
+            if column_index == 0:
+                axis.set_ylabel("Throughput / paired $w=0$")
+            if row_index == len(EXPECTED_MACHINES) - 1:
+                axis.set_xlabel("DataLoader workers")
+            axis.set_xticks(EXPECTED_WORKERS)
+    axes[0, 0].legend(frameon=False, ncol=2, fontsize=8)
+    figure.savefig(destination)
+    plt.close(figure)
+
+
+def _plot_protocol_regret(decisions: list[dict[str, Any]], destination: Path) -> None:
+    plt = _pyplot()
+    labels = [f"{row['platform']}\n{row['workload'].removeprefix('fodb-')}" for row in decisions]
+    paired = [row["paired_regret_percent"] for row in decisions]
+    means = [statistics.fmean(values) for values in paired]
+    colors = ["#4C78A8" if row["strict_leader_match"] else "#E45756" for row in decisions]
+    figure, axis = plt.subplots(figsize=(7.1, 3.4), constrained_layout=True)
+    positions = list(range(len(decisions)))
+    axis.bar(positions, means, color=colors, alpha=0.82)
+    for position, values in zip(positions, paired, strict=True):
+        offsets = (-0.12, -0.06, 0, 0.06, 0.12)
+        axis.scatter([position + offset for offset in offsets], values, color="black", s=12, alpha=0.65, zorder=3)
+    axis.axhline(0, color="0.3", linewidth=0.8)
+    axis.axhline(PRACTICAL_MARGIN * 100, color="0.3", linewidth=0.9, linestyle="--", label="5% margin")
+    axis.set_xticks(positions, labels, rotation=25, ha="right")
+    axis.set_ylabel("Loader regret after worker tuning (%)")
+    axis.grid(axis="y", alpha=0.2)
+    axis.legend(frameon=False)
+    figure.savefig(destination)
+    plt.close(figure)
+
+
+def _pyplot() -> Any:
+    try:
+        import matplotlib as mpl
+
+        mpl.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise PaperAssetError("paper figures require `uv run --extra plot`") from exc
+    return plt
+
+
+def _latex_workload(workload: str) -> str:
+    return workload.replace("fodb-", "FODB-")
+
+
+def _latex_decoder_list(value: str) -> str:
+    return ", ".join(f"\\texttt{{{item.strip()}}}" for item in value.split(","))
+
+
+def _sequence_digest(values: list[str]) -> str:
+    return hashlib.sha256(("\n".join(values) + "\n").encode()).hexdigest()
+
+
+def _jpeg_number(item: object, key: str) -> float:
+    if not isinstance(item, dict):
+        raise PaperAssetError("package item must be an object")
+    return _required_number(_required_object(item, "jpeg"), key)
+
+
+def _read_object(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PaperAssetError(f"cannot read {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise PaperAssetError(f"{path} must contain a JSON object")
+    return value
+
+
+def _required_object(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise PaperAssetError(f"field {key!r} must be an object")
+    return value
+
+
+def _required_list(payload: dict[str, Any], key: str) -> list[Any]:
+    value = payload.get(key)
+    if not isinstance(value, list):
+        raise PaperAssetError(f"field {key!r} must be a list")
+    return value
+
+
+def _required_string(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value:
+        raise PaperAssetError(f"field {key!r} must be a non-empty string")
+    return value
+
+
+def _required_int(payload: dict[str, Any], key: str) -> int:
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise PaperAssetError(f"field {key!r} must be an integer")
+    return value
+
+
+def _optional_int(payload: dict[str, Any], key: str) -> int | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise PaperAssetError(f"field {key!r} must be an integer or null")
+    return value
+
+
+def _required_number(payload: dict[str, Any], key: str) -> float:
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PaperAssetError(f"field {key!r} must be numeric")
+    return float(value)
+
+
+def _write_json(path: Path, payload: object) -> None:
+    _write_text(path, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+def _write_text(path: Path, content: str) -> None:
+    path.write_text(content)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate claim-scoped FODB paper evidence and vector figures.")
+    parser.add_argument("--artifacts", type=Path, required=True, help="Hydrated schema-2 artifact root.")
+    parser.add_argument("--package", type=Path, required=True, help="FODB package.json used by the campaigns.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="Paper directory containing generated/ and figures/.",
+    )
+    args = parser.parse_args()
+    evidence = build_paper_assets(artifact_root=args.artifacts, package_path=args.package, output_root=args.output)
+    print(json.dumps({"bundles": evidence["coverage"]["committed_evidence_bundles"], "status": "generated"}))
+
+
+if __name__ == "__main__":
+    main()
