@@ -39,22 +39,42 @@ CONTROLLED_THREADS = {"opencv": 1, "pyvips": 1, "torchvision": 1}
 PRIMARY_DECODERS = ("pillow", "opencv", "simplejpeg", "torchvision")
 MIGRATION_DECODERS = ("pillow", "opencv", "simplejpeg")
 PRACTICAL_MARGIN = 0.10
-ROBUSTNESS_AUDIT_ITEM_COUNT = 277
 ROBUSTNESS_AUDIT_PACKAGE_ID = "b797eb3938cad77e115b2315b41457c5d6b3062968f7529ee35d1b38dd87eb2f"
 ROBUSTNESS_AUDIT_MANIFEST_ID = "47f437595cf8a3215deb958f7278d63bcc6b2a00d4d595d821351431ceda803f"
-ROBUSTNESS_AUDIT_SUCCESSES = {
+ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT = 276
+ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES = {
     "ajpegli": 0,
     "imagecodecs": 276,
     "imageio": 276,
     "jpeg4py": 276,
     "kornia": 276,
-    "opencv": 277,
-    "pillow": 277,
+    "opencv": 276,
+    "pillow": 276,
     "pyvips": 276,
-    "simplejpeg": 277,
+    "simplejpeg": 276,
     "skimage": 276,
     "torchvision": 276,
     "turbojpeg": 276,
+}
+ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT = 1
+ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES = {
+    "ajpegli": 0,
+    "imagecodecs": 0,
+    "imageio": 0,
+    "jpeg4py": 0,
+    "kornia": 0,
+    "opencv": 1,
+    "pillow": 1,
+    "pyvips": 0,
+    "simplejpeg": 1,
+    "skimage": 0,
+    "torchvision": 0,
+    "turbojpeg": 0,
+}
+ROBUSTNESS_AUDIT_ITEM_COUNT = ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT + ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT
+ROBUSTNESS_AUDIT_SUCCESSES = {
+    decoder: successes + ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES[decoder]
+    for decoder, successes in ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES.items()
 }
 
 
@@ -354,7 +374,12 @@ def _recommendation_rows(
     aggregates: tuple[Aggregate, ...],
     robustness_audit_successes: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    audit_successes = ROBUSTNESS_AUDIT_SUCCESSES if robustness_audit_successes is None else robustness_audit_successes
+    if robustness_audit_successes is None:
+        audit_successes = ROBUSTNESS_AUDIT_SUCCESSES
+        uses_recorded_audit = True
+    else:
+        audit_successes = robustness_audit_successes
+        uses_recorded_audit = False
     cells: list[dict[str, Any]] = []
     gaps_by_decoder: dict[str, list[float]] = defaultdict(list)
     for machine_type in EXPECTED_MACHINES:
@@ -436,44 +461,60 @@ def _recommendation_rows(
         (decoder for decoder, gap in worst_gap_percent.items() if gap <= PRACTICAL_MARGIN * 100),
         key=lambda decoder: (worst_gap_percent[decoder], decoder),
     )
+    robustness_audit = {
+        "item_count": ROBUSTNESS_AUDIT_ITEM_COUNT,
+        "linux_receipts": [
+            {
+                "job": "imread-20260802-180331-9cbbc8f2",
+                "plan_id": "2cab69bcdb92b33c41f8d0ec225ccb91e3e314f792caca517e7280a667578250",
+                "result": (
+                    "ajpegli support audit completed with 0/277 before the empty support set stopped the campaign"
+                ),
+            },
+            {
+                "committed_bundles": 11,
+                "job": "imread-20260802-181101-9cbbc8f2",
+                "plan_id": "98e8f88e2820b1a0992d0a72cb299d95d52fb2d0d700884567eac54d23282e2e",
+                "result": "completed",
+            },
+        ],
+        "manifest_id": ROBUSTNESS_AUDIT_MANIFEST_ID,
+        "output_contract": "normalized-rgb",
+        "package_id": ROBUSTNESS_AUDIT_PACKAGE_ID,
+        "platform": {
+            "machine_type": "c3-standard-4",
+            "operating_system": "Ubuntu 24.04",
+            "zone": "us-central1-a",
+        },
+        "process_context": "main-process support audit",
+        "runner_revision": "9cbbc8f212ad9a384fbabf1dde582023077e83dcda0ac285baf0c16351febb8f",
+        "selection": "276 FODB empty-DHT exclusions plus one four-component RGB-contract sentinel",
+        "successes": dict(sorted(audit_successes.items())),
+    }
+    if uses_recorded_audit:
+        robustness_audit["categories"] = {
+            "empty_dht_bitstream": {
+                "description": (
+                    "Progressive FODB WhatsApp JPEGs containing empty DHT markers; success measures decoder "
+                    "recovery from this malformed bitstream pattern."
+                ),
+                "item_count": ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT,
+                "successes": dict(sorted(ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES.items())),
+            },
+            "four_component_rgb": {
+                "description": (
+                    "A four-component JPEG; success requires conversion to the normalized three-channel RGB contract."
+                ),
+                "filename": "ILSVRC2012_val_00019877.JPEG",
+                "item_count": ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT,
+                "sha256": "75413aece0dc58bcd9d4b89f664ab04cee3ade28317d81aeace455029e0000ba",
+                "successes": dict(sorted(ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES.items())),
+            },
+        }
     return {
         "cells": cells,
         "coverage_qualified_decoders": robust_decoders,
-        "robustness_audit": {
-            "fodb_exclusion_items": 276,
-            "imagenet_sentinel": {
-                "filename": "ILSVRC2012_val_00019877.JPEG",
-                "sha256": "75413aece0dc58bcd9d4b89f664ab04cee3ade28317d81aeace455029e0000ba",
-            },
-            "item_count": ROBUSTNESS_AUDIT_ITEM_COUNT,
-            "linux_receipts": [
-                {
-                    "job": "imread-20260802-180331-9cbbc8f2",
-                    "plan_id": "2cab69bcdb92b33c41f8d0ec225ccb91e3e314f792caca517e7280a667578250",
-                    "result": (
-                        "ajpegli support audit completed with 0/277 before the empty support set stopped the campaign"
-                    ),
-                },
-                {
-                    "committed_bundles": 11,
-                    "job": "imread-20260802-181101-9cbbc8f2",
-                    "plan_id": "98e8f88e2820b1a0992d0a72cb299d95d52fb2d0d700884567eac54d23282e2e",
-                    "result": "completed",
-                },
-            ],
-            "manifest_id": ROBUSTNESS_AUDIT_MANIFEST_ID,
-            "output_contract": "normalized-rgb",
-            "package_id": ROBUSTNESS_AUDIT_PACKAGE_ID,
-            "platform": {
-                "machine_type": "c3-standard-4",
-                "operating_system": "Ubuntu 24.04",
-                "zone": "us-central1-a",
-            },
-            "process_context": "main-process support audit",
-            "runner_revision": "9cbbc8f212ad9a384fbabf1dde582023077e83dcda0ac285baf0c16351febb8f",
-            "selection": "276 FODB common-support exclusions plus one known four-component ImageNet JPEG",
-            "successes": dict(sorted(audit_successes.items())),
-        },
+        "robustness_audit": robustness_audit,
         "portable_decoder": portable_decoder,
         "portable_max_gap_percent": worst_gap_percent[portable_decoder],
         "portable_speed_candidates": portable_speed_candidates,
@@ -812,12 +853,15 @@ def _only(rows: tuple[Aggregate, ...], key: AggregateKey) -> Aggregate:
 
 
 def _summary_markdown(evidence: dict[str, Any]) -> str:
+    robustness_audit = evidence["recommendations"]["robustness_audit"]
+    empty_dht = robustness_audit["categories"]["empty_dht_bitstream"]
+    four_component = robustness_audit["categories"]["four_component_rgb"]
     lines = [
         "# Generated FODB evidence",
         "",
         "All values below are generated from the two exact evidence plan IDs in `fodb_evidence.json`.",
         "Recommendation analysis first keeps decoders within 10% of the local loader leader, "
-        "then applies the 277-file robustness audit.",
+        "then applies separate empty-DHT bitstream and four-component RGB robustness tests.",
         "The 10% margin is a reporting policy, not a hypothesis test.",
         "",
         "## Workloads",
@@ -857,6 +901,27 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
             f"{', '.join(row['recommended'])} | {row['leader']} |"
         )
         for row in evidence["recommendations"]["cells"]
+    )
+    lines.extend(
+        [
+            "",
+            "## Robustness audit",
+            "",
+            "The empty-DHT test measures recovery from one malformed bitstream pattern. "
+            "The four-component test measures conversion to the normalized three-channel RGB contract; "
+            "the sentinel is not classified as corrupt.",
+            "",
+            "| Decoder | Empty-DHT bitstreams | Four-component RGB | Combined |",
+            "| --- | ---: | ---: | ---: |",
+        ],
+    )
+    lines.extend(
+        (
+            f"| `{decoder}` | {empty_dht['successes'][decoder]}/{empty_dht['item_count']} | "
+            f"{four_component['successes'][decoder]}/{four_component['item_count']} | "
+            f"{robustness_audit['successes'][decoder]}/{robustness_audit['item_count']} |"
+        )
+        for decoder in sorted(robustness_audit["successes"])
     )
     lines.extend(
         [
@@ -966,13 +1031,23 @@ def _recommendation_table(recommendations: dict[str, Any]) -> str:
 
 
 def _decoder_coverage_table(recommendations: dict[str, Any]) -> str:
-    successes = recommendations["robustness_audit"]["successes"]
+    audit = recommendations["robustness_audit"]
+    categories = audit.get("categories")
+    if not isinstance(categories, dict):
+        raise PaperAssetError("decoder coverage table requires the recorded two-category robustness audit")
+    empty_dht = categories["empty_dht_bitstream"]
+    four_component = categories["four_component_rgb"]
+    empty_dht_successes = empty_dht["successes"]
+    four_component_successes = four_component["successes"]
+    combined_successes = audit["successes"]
     body = []
-    for decoder in sorted(successes):
-        audited_successes = successes[decoder]
-        result = f"{audited_successes}/{ROBUSTNESS_AUDIT_ITEM_COUNT}"
-        eligible = "yes" if audited_successes == ROBUSTNESS_AUDIT_ITEM_COUNT else "no"
-        body.append(f"\\texttt{{{decoder}}} & {result} & {eligible} ")
+    for decoder in sorted(combined_successes):
+        bitstream_result = f"{empty_dht_successes[decoder]}/{empty_dht['item_count']}"
+        four_component_result = f"{four_component_successes[decoder]}/{four_component['item_count']}"
+        combined_result = f"{combined_successes[decoder]}/{audit['item_count']}"
+        body.append(
+            f"\\texttt{{{decoder}}} & {bitstream_result} & {four_component_result} & {combined_result} ",
+        )
     return (r"\\" + "\n").join(body) + "\n"
 
 

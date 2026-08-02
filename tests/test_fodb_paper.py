@@ -4,7 +4,14 @@ import pytest
 
 from imread_benchmark.analysis.fodb_paper import (
     EXPECTED_MACHINES,
+    ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT,
+    ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES,
+    ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT,
+    ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES,
+    ROBUSTNESS_AUDIT_ITEM_COUNT,
+    ROBUSTNESS_AUDIT_SUCCESSES,
     Aggregate,
+    _decoder_coverage_table,
     _linear_quantile,
     _ranks,
     _recommendation_rows,
@@ -64,6 +71,41 @@ def test_rank_and_quantile_helpers_are_deterministic() -> None:
         "d": 4.0,
     }
     assert _linear_quantile([1.0, 2.0, 3.0], 0.25) == pytest.approx(1.5)
+
+
+def test_robustness_audit_reports_bitstream_and_output_contract_separately() -> None:
+    assert ROBUSTNESS_AUDIT_ITEM_COUNT == (
+        ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT + ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT
+    )
+    assert set(ROBUSTNESS_AUDIT_SUCCESSES) == set(ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES)
+    assert set(ROBUSTNESS_AUDIT_SUCCESSES) == set(ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES)
+    for decoder, combined_successes in ROBUSTNESS_AUDIT_SUCCESSES.items():
+        assert combined_successes == (
+            ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES[decoder] + ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES[decoder]
+        )
+
+    table = _decoder_coverage_table(
+        {
+            "robustness_audit": {
+                "categories": {
+                    "empty_dht_bitstream": {
+                        "item_count": ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT,
+                        "successes": ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES,
+                    },
+                    "four_component_rgb": {
+                        "item_count": ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT,
+                        "successes": ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES,
+                    },
+                },
+                "item_count": ROBUSTNESS_AUDIT_ITEM_COUNT,
+                "successes": ROBUSTNESS_AUDIT_SUCCESSES,
+            },
+        },
+    )
+
+    assert r"\texttt{ajpegli} & 0/276 & 0/1 & 0/277" in table
+    assert r"\texttt{torchvision} & 276/276 & 0/1 & 276/277" in table
+    assert r"\texttt{simplejpeg} & 276/276 & 1/1 & 277/277" in table
 
 
 def test_recommendations_select_the_minimax_portable_decoder() -> None:
