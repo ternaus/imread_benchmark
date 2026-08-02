@@ -3,6 +3,14 @@
 
 set -euo pipefail
 
+# GCS resume transfers can require many short-lived subprocesses.  Keep their
+# descriptor ceiling above the Ubuntu default and bypass the Snap launcher,
+# whose per-command DBus scope creation is unreliable under that load.
+ulimit -n 65535
+if [[ -x /snap/google-cloud-cli/current/bin/gcloud ]]; then
+    export PATH="/snap/google-cloud-cli/current/bin:$PATH"
+fi
+
 METADATA_ROOT="http://metadata.google.internal/computeMetadata/v1"
 METADATA_HEADER="Metadata-Flavor: Google"
 
