@@ -150,8 +150,8 @@ whole. Plan expansion rejects a requested thread count when the adapter cannot
 set and report it, before any cloud VM is launched.
 
 The dense sweep `{0,1,2,4,6,8,12,16}` is not part of the broad matrix. Workers
-1 and 6 add cost without answering a primary claim, and 12/16 can make decoded
-in-flight memory dominate on large native images.
+1 and 6 add cost without answering a primary claim, and high worker counts can
+make decoded in-flight memory dominate on large native images.
 
 Use an adaptive second stage only when a pilot shows one of these conditions:
 
@@ -161,9 +161,36 @@ Use an adaptive second stage only when a pilot shows one of these conditions:
 - runtime worker probes or memory telemetry suggest an oversubscription
   mechanism worth isolating.
 
-Then add `{12,16}` only for the affected decoder × platform × workload cells,
-with the same repetition policy. This is a targeted mechanism experiment, not a
+Extend one boundary at a time. First add `12` only for the affected decoder ×
+platform × workload cells, with the same repetition policy. After those results
+are complete, add `16` only for the subset whose highest observed mean over
+`{0,2,4,8,12}` is at `12`. This is a targeted mechanism experiment, not a
 post-hoc replacement for the declared core matrix.
+
+Freeze each follow-up stage before observing its new worker count. A cell enters
+the `workers=12` stage when its controlled-thread loader configuration has its
+highest observed mean at `workers=8` over the completed `{0,2,4,8}` matrix. The
+stage adds five fresh-process repetitions at `workers=12` and leaves every
+other cell unchanged. Only those selected cells are then eligible for a
+possible `workers=16` stage, and only when their highest observed mean after the
+first extension is at `workers=12`.
+
+The completed FODB matrix selects 87 of 96 controlled decoder × platform ×
+workload cells for the first extension, for 435 additional bundles. The
+checked-in follow-up templates encode the frozen `workers=12` selection:
+
+| Workload and platform | Eligible decoders | Template |
+| --- | ---: | --- |
+| FODB-mixed, all four platforms | 12 | `fodb-worker-followup-all.template.yaml` |
+| FODB-native, AMD Zen 5 and Axion | 12 | `fodb-worker-followup-all.template.yaml` |
+| FODB-native, Intel 8581C | 8 | `fodb-worker-followup-native-intel.template.yaml` |
+| FODB-native, AMD Zen 4 | 7 | `fodb-worker-followup-native-zen4.template.yaml` |
+
+This stage tests whether the selected curves continue rising beyond eight
+workers. A later `workers=16` stage is conditional on the observed boundary at
+12; it is not launched for all 87 cells by default. Neither stage turns the
+naturally heterogeneous FODB workloads into a causal test of resolution or
+JPEG quality.
 
 Every plan declares `execution.maximum_memory_fraction`. Campaign preflight
 conservatively counts resident compressed-byte replicas (including `spawn` or
