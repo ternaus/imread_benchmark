@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from imread_benchmark.artifacts.bundle import REMOTE_BUNDLE_FILES, validate_run_bundle
-from imread_benchmark.datasets.materializer import ObjectNotFoundError, ObjectStore
+from imread_benchmark.datasets.materializer import LocalObjectStore, ObjectNotFoundError, ObjectStore
 
 
 class RemoteArtifactError(RuntimeError):
@@ -60,6 +60,38 @@ def pull_committed_run(
         raise RemoteArtifactError(f"cannot materialize committed run {run_key}: {exc}") from exc
     finally:
         shutil.rmtree(staging_root, ignore_errors=True)
+
+
+def hydrate_committed_runs(
+    *,
+    source_artifact_root: str | Path,
+    destination_artifact_root: str | Path,
+) -> tuple[Path, ...]:
+    """Materialize a downloaded remote artifact layout into local run bundles."""
+    source_root = Path(source_artifact_root).resolve()
+    destination_root = Path(destination_artifact_root).resolve()
+    markers_root = source_root / "runs"
+    if not markers_root.is_dir():
+        raise RemoteArtifactError(f"downloaded artifact root has no runs directory: {source_root}")
+    if source_root == destination_root:
+        raise RemoteArtifactError("source and destination artifact roots must differ")
+
+    store = LocalObjectStore(source_root.parent)
+    hydrated: list[Path] = []
+    for marker in sorted(markers_root.glob("*/COMMITTED.json")):
+        run_key = marker.parent.name
+        bundle = pull_committed_run(
+            run_key,
+            store=store,
+            artifact_root=destination_root,
+            prefix=source_root.name,
+        )
+        if bundle is None:
+            raise RemoteArtifactError(f"downloaded commit marker disappeared for run {run_key}")
+        hydrated.append(bundle)
+    if not hydrated:
+        raise RemoteArtifactError(f"downloaded artifact root has no committed runs: {source_root}")
+    return tuple(hydrated)
 
 
 def _pull_into_staging(

@@ -7,6 +7,7 @@ import pytest
 
 from imread_benchmark.artifacts import (
     RemoteArtifactError,
+    hydrate_committed_runs,
     publish_run_bundle,
     pull_committed_run,
     validate_run_bundle,
@@ -58,3 +59,18 @@ def test_incomplete_remote_prefix_is_ignored_but_broken_commit_is_terminal(tmp_p
 
     with pytest.raises(RemoteArtifactError, match="missing"):
         pull_committed_run(run_key, store=store, artifact_root=tmp_path / "broken-fresh")
+
+
+def test_downloaded_remote_layout_hydrates_to_valid_local_runs(tmp_path: Path) -> None:
+    """A raw rsync of remote artifacts can be validated after local hydration."""
+    run_key, source = _bundle(tmp_path / "source-runs")
+    downloaded_root = tmp_path / "downloaded"
+    publish_run_bundle(source, store=LocalObjectStore(downloaded_root))
+
+    hydrated = hydrate_committed_runs(
+        source_artifact_root=downloaded_root / "artifacts",
+        destination_artifact_root=tmp_path / "hydrated",
+    )
+
+    assert [path.name for path in hydrated] == [run_key]
+    validate_run_bundle(hydrated[0], expected_run_key=run_key)

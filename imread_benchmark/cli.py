@@ -8,7 +8,7 @@ from pathlib import Path
 import typer
 
 from imread_benchmark.analysis.publication import publish
-from imread_benchmark.artifacts import validate_run_bundle
+from imread_benchmark.artifacts import hydrate_committed_runs, validate_run_bundle
 from imread_benchmark.datasets.fodb import prepare_fodb
 from imread_benchmark.datasets.gcs import GcloudObjectStore
 from imread_benchmark.datasets.materializer import materialize_dataset_package, publish_dataset_package
@@ -27,7 +27,7 @@ dataset_app = typer.Typer(help="Build, publish, and materialize immutable datase
 plan_app = typer.Typer(help="Instantiate, validate, and expand schema-2 experiment plans.")
 environment_app = typer.Typer(help="Provision immutable lock-backed worker environments.")
 platform_app = typer.Typer(help="Capture platform provenance.")
-artifacts_app = typer.Typer(help="Validate committed run bundles.")
+artifacts_app = typer.Typer(help="Hydrate and validate committed run bundles.")
 campaign_app = typer.Typer(help="Run or resume an isolated benchmark campaign.")
 app.add_typer(dataset_app, name="dataset")
 app.add_typer(plan_app, name="plan")
@@ -312,6 +312,25 @@ def artifacts_validate(
     for bundle in bundles:
         validate_run_bundle(bundle, expected_run_key=bundle.name)
     _emit_json({"bundle_count": len(bundles), "schema_version": "2.0", "status": "valid"})
+
+
+@artifacts_app.command("hydrate")
+def artifacts_hydrate(
+    source_artifact_root: Path = typer.Argument(..., exists=True, file_okay=False),
+    output_root: Path = typer.Option(..., "--output-root", file_okay=False),
+) -> None:
+    """Rebuild local run bundles from a downloaded remote artifact layout."""
+    bundles = hydrate_committed_runs(
+        source_artifact_root=source_artifact_root,
+        destination_artifact_root=output_root,
+    )
+    _emit_json(
+        {
+            "bundle_count": len(bundles),
+            "output_root": str(output_root.resolve()),
+            "schema_version": "2.0",
+        },
+    )
 
 
 @app.command("publish")
