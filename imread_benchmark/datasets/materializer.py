@@ -58,7 +58,9 @@ class LocalObjectStore:
             if _sha256_file(destination) != _sha256_file(source):
                 raise ObjectConflictError(f"remote object already exists with different content: {key}")
             return
-        temporary = Path(tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)[1])
+        descriptor, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
+        os.close(descriptor)
+        temporary = Path(temporary_name)
         try:
             shutil.copyfile(source, temporary)
             try:

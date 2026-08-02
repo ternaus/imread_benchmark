@@ -66,7 +66,12 @@ class GcloudObjectStore:
     def download(self, key: str, destination: Path) -> None:
         self.metadata(key)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = Path(tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)[1])
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.",
+            dir=destination.parent,
+        )
+        os.close(descriptor)
+        temporary = Path(temporary_name)
         try:
             result = self._run(("storage", "cp", self._uri(key), str(temporary), "--quiet"))
             if result.returncode != 0:
