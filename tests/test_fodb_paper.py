@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from imread_benchmark.analysis.fodb_paper import (
+    DEPLOYMENT_WORKERS,
     EXPECTED_MACHINES,
     ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT,
     ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES,
@@ -10,11 +11,14 @@ from imread_benchmark.analysis.fodb_paper import (
     ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES,
     ROBUSTNESS_AUDIT_ITEM_COUNT,
     ROBUSTNESS_AUDIT_SUCCESSES,
+    WORKER12_DECODERS,
+    WORKER12_PLAN_SCOPES,
     Aggregate,
     _decoder_coverage_table,
     _linear_quantile,
     _ranks,
     _recommendation_rows,
+    _worker16_candidate_rows,
     _workload_descriptors,
 )
 
@@ -71,6 +75,50 @@ def test_rank_and_quantile_helpers_are_deterministic() -> None:
         "d": 4.0,
     }
     assert _linear_quantile([1.0, 2.0, 3.0], 0.25) == pytest.approx(1.5)
+
+
+def test_workers_12_followup_is_frozen_to_87_cells() -> None:
+    assert sum(len(decoders) for decoders in WORKER12_DECODERS.values()) == 87
+    assert sum(len(decoders) * 5 for decoders in WORKER12_DECODERS.values()) == 435
+    assert DEPLOYMENT_WORKERS == (4, 8, 12)
+
+    plan_scopes = {
+        cell: decoders for scoped_cells in WORKER12_PLAN_SCOPES.values() for cell, decoders in scoped_cells.items()
+    }
+    assert plan_scopes == WORKER12_DECODERS
+
+
+def test_workers_16_candidates_require_the_new_boundary_to_remain_best() -> None:
+    aggregates = []
+    means = {
+        "pillow": {0: 50.0, 2: 70.0, 4: 80.0, 8: 90.0, 12: 95.0},
+        "opencv": {0: 50.0, 2: 70.0, 4: 80.0, 8: 90.0, 12: 85.0},
+    }
+    for decoder, worker_means in means.items():
+        for workers, mean in worker_means.items():
+            aggregates.append(
+                Aggregate(
+                    workload="fodb-native",
+                    machine_type="c4-standard-16",
+                    protocol="loader-supply",
+                    decoder=decoder,
+                    requested_threads=1 if decoder == "opencv" else None,
+                    workers=workers,
+                    repetitions=(0, 1, 2, 3, 4),
+                    raw_run_means=(mean,) * 5,
+                    mean=mean,
+                    sample_std=0.0,
+                ),
+            )
+
+    candidates = _worker16_candidate_rows(
+        tuple(aggregates),
+        {("fodb-native", "c4-standard-16"): ("pillow", "opencv")},
+    )
+
+    assert candidates["candidate_count"] == 1
+    assert candidates["bundle_count_if_launched"] == 5
+    assert [row["decoder"] for row in candidates["cells"][0]["decoders"]] == ["pillow"]
 
 
 def test_robustness_audit_reports_bitstream_and_output_contract_separately() -> None:
