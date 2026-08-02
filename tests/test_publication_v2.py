@@ -80,3 +80,40 @@ generator_revision: "1111111111111111111111111111111111111111"
 
     with pytest.raises(ValueError, match="training"):
         publish(artifact_root=artifact_root, spec_path=spec, output_dir=tmp_path / "generated")
+
+
+def test_publication_groups_legacy_runs_across_zones_but_retains_zone_provenance(tmp_path: Path) -> None:
+    artifact_root = tmp_path / "artifacts"
+    for repetition, zone in ((0, "us-central1-a"), (1, "us-central1-b")):
+        run_key, data = valid_bundle_data(
+            repetition=repetition,
+            block_position=repetition,
+            platform_identity={
+                "architecture": "fixture",
+                "location": zone,
+                "logical_cpu_count": 1,
+                "machine_type": "fixture",
+            },
+        )
+        write_run_bundle(root=artifact_root / "runs", run_key=run_key, data=data)
+    spec = tmp_path / "publication.yaml"
+    spec.write_text(
+        """\
+schema_version: "2.0"
+claim_scope: decoder-capacity
+filters:
+  config.protocol_id: decode-memory
+statistic: images_per_second
+practical_margin_percent: 5
+generator_revision: "1111111111111111111111111111111111111111"
+""",
+    )
+
+    publish(artifact_root=artifact_root, spec_path=spec, output_dir=tmp_path / "generated")
+
+    table = json.loads((tmp_path / "generated" / "results.json").read_text())
+    assert len(table["groups"]) == 1
+    group = table["groups"][0]
+    assert group["n"] == 2
+    assert len(group["platform_ids"]) == 2
+    assert group["platform_locations"] == ["us-central1-a", "us-central1-b"]

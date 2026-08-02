@@ -98,7 +98,10 @@ Incomplete prefixes are ignored.
 ```
 
 The wrapper tries fallback zones only for capacity errors and runs machine types
-sequentially. Platform ID is part of every run key, so results cannot collide.
+sequentially. Zone is recorded in each bundle as execution provenance, while
+the canonical platform identity uses the captured machine and CPU properties
+that determine comparability. This lets a capacity retry reuse the same
+platform group without hiding where each run executed.
 
 ## Fault drill
 
@@ -106,7 +109,8 @@ Before the evidence campaign:
 
 1. launch a smoke plan with at least three run specs;
 2. terminate the VM after K committed runs;
-3. relaunch the identical source and plan on the same machine type;
+3. relaunch the identical source and plan on the same machine type; use a
+   different zone if capacity requires it;
 4. verify the new campaign reports K skipped and N−K completed runs;
 5. validate all local or downloaded bundles with `artifacts validate`.
 

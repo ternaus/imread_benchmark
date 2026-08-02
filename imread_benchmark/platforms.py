@@ -23,30 +23,51 @@ class PlatformDescriptor:
     platform_id: str
     identity: dict[str, object]
     runtime: dict[str, object]
+    provenance: dict[str, object]
 
     @classmethod
-    def build(cls, *, identity: dict[str, object], runtime: dict[str, object]) -> PlatformDescriptor:
+    def build(
+        cls,
+        *,
+        identity: dict[str, object],
+        runtime: dict[str, object],
+        provenance: dict[str, object] | None = None,
+    ) -> PlatformDescriptor:
         if not identity or any(not isinstance(key, str) or not key for key in identity):
             raise ValueError("platform identity must be a non-empty object")
         if any(not isinstance(key, str) or not key for key in runtime):
             raise ValueError("platform runtime keys must be non-empty strings")
+        if provenance is not None and any(not isinstance(key, str) or not key for key in provenance):
+            raise ValueError("platform provenance keys must be non-empty strings")
         normalized_identity = _canonical_object(identity)
         normalized_runtime = _canonical_object(runtime)
+        normalized_provenance = _canonical_object(provenance or {})
         platform_id = _digest(
             {
                 "identity": normalized_identity,
                 "schema_version": PLATFORM_SCHEMA_VERSION,
             },
         )
-        return cls(platform_id=platform_id, identity=normalized_identity, runtime=normalized_runtime)
+        return cls(
+            platform_id=platform_id,
+            identity=normalized_identity,
+            runtime=normalized_runtime,
+            provenance=normalized_provenance,
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
             "identity": self.identity,
             "platform_id": self.platform_id,
+            "provenance": self.provenance,
             "runtime": self.runtime,
             "schema_version": PLATFORM_SCHEMA_VERSION,
         }
+
+    @property
+    def comparison_platform_id(self) -> str:
+        """Stable comparison key that deliberately excludes execution zone."""
+        return _comparison_platform_id(self.identity)
 
 
 def capture_current_platform(
@@ -73,7 +94,6 @@ def capture_current_platform(
         "cpu_model": cpu.get("model"),
         "cpu_stepping": cpu.get("stepping"),
         "cpu_vendor": cpu.get("vendor_id_raw") or "unknown",
-        "location": location,
         "logical_cpu_count": logical_cpu_count,
         "machine_type": machine_type,
         "system": platform.system(),
@@ -86,7 +106,11 @@ def capture_current_platform(
         "memory_bytes": _memory_bytes(),
         "thread_environment": {key: os.environ[key] for key in _THREAD_ENVIRONMENT_VARIABLES if key in os.environ},
     }
-    return PlatformDescriptor.build(identity=identity, runtime=runtime)
+    return PlatformDescriptor.build(
+        identity=identity,
+        runtime=runtime,
+        provenance={"location": location},
+    )
 
 
 def write_platform_descriptor(path: str | Path, descriptor: PlatformDescriptor) -> Path:
@@ -125,12 +149,42 @@ def load_platform_descriptor(path: str | Path) -> PlatformDescriptor:
         raise ValueError("unsupported platform descriptor schema")
     identity = document.get("identity")
     runtime = document.get("runtime")
-    if not isinstance(identity, dict) or not isinstance(runtime, dict):
-        raise TypeError("platform descriptor identity and runtime must be objects")
-    descriptor = PlatformDescriptor.build(identity=identity, runtime=runtime)
+    provenance = document.get("provenance", {})
+    if not isinstance(identity, dict) or not isinstance(runtime, dict) or not isinstance(provenance, dict):
+        raise TypeError("platform descriptor identity, runtime, and provenance must be objects")
+    descriptor = PlatformDescriptor.build(identity=identity, runtime=runtime, provenance=provenance)
     if document.get("platform_id") != descriptor.platform_id:
         raise ValueError("platform_id does not match descriptor content")
     return descriptor
+
+
+def platform_comparison_id(document: dict[str, object]) -> str:
+    """
+    Return the zone-independent comparison key for a persisted descriptor.
+
+    Legacy descriptors recorded ``location`` in ``identity``.  New descriptors
+    record it in ``provenance``.  Normalizing both forms here keeps already
+    committed evidence usable without concealing the execution zone.
+    """
+    identity = document.get("identity")
+    if not isinstance(identity, dict):
+        raise TypeError("platform descriptor identity must be an object")
+    return _comparison_platform_id(identity)
+
+
+def platform_location(document: dict[str, object]) -> str | None:
+    """Return the recorded execution zone from new or legacy provenance."""
+    provenance = document.get("provenance")
+    if isinstance(provenance, dict):
+        value = provenance.get("location")
+        if isinstance(value, str) and value:
+            return value
+    identity = document.get("identity")
+    if isinstance(identity, dict):
+        value = identity.get("location")
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 def _canonical_object(value: dict[str, object]) -> dict[str, object]:
@@ -147,6 +201,17 @@ def _canonical_object(value: dict[str, object]) -> dict[str, object]:
 def _digest(payload: object) -> str:
     canonical = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _comparison_platform_id(identity: dict[str, object]) -> str:
+    comparison_identity = {key: value for key, value in identity.items() if key != "location"}
+    normalized_identity = _canonical_object(comparison_identity)
+    return _digest(
+        {
+            "identity": normalized_identity,
+            "schema_version": PLATFORM_SCHEMA_VERSION,
+        },
+    )
 
 
 def _multiprocessing_start_methods() -> list[str]:

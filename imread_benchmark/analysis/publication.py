@@ -13,6 +13,7 @@ import yaml
 
 from imread_benchmark.analysis.canonical import RunBundleRecord, load_bundles
 from imread_benchmark.analysis.claims import ClaimScope, assert_claim_scope
+from imread_benchmark.platforms import platform_comparison_id, platform_location
 
 PUBLICATION_SCHEMA_VERSION = "2.0"
 _REVISION = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
@@ -145,6 +146,8 @@ def _result_row(record: RunBundleRecord, statistic: str) -> dict[str, object]:
         "median": summary.get("median"),
         "n": summary.get("n"),
         "platform_id": record.platform.get("platform_id"),
+        "platform_comparison_id": platform_comparison_id(record.platform),
+        "platform_location": platform_location(record.platform),
         "protocol_id": record.config.get("protocol_id"),
         "raw_samples": [
             _sample_value(sample.elapsed_seconds, sample.items_processed, statistic) for sample in record.samples
@@ -166,7 +169,7 @@ def _group_rows(records: tuple[RunBundleRecord, ...], statistic: str) -> list[di
             record.dataset.get("workload_id"),
             record.dataset.get("support_set_id"),
             record.environment.get("environment_id"),
-            record.platform.get("platform_id"),
+            platform_comparison_id(record.platform),
         )
         groups.setdefault(key, []).append(record)
     return [_group_row(groups[key], statistic) for key in sorted(groups, key=_sortable_group_key)]
@@ -199,7 +202,11 @@ def _group_row(records: list[RunBundleRecord], statistic: str) -> dict[str, obje
         "mean": statistics.fmean(values),
         "median": statistics.median(values),
         "n": len(values),
-        "platform_id": first.platform.get("platform_id"),
+        "platform_comparison_id": platform_comparison_id(first.platform),
+        "platform_ids": sorted({str(record.platform.get("platform_id")) for record in ordered}),
+        "platform_locations": sorted(
+            {location for record in ordered if (location := platform_location(record.platform)) is not None},
+        ),
         "raw_run_means": values,
         "repetitions": repetitions,
         "run_keys": [record.run_key for record in ordered],

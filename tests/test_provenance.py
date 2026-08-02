@@ -10,7 +10,14 @@ from imread_benchmark.environments import (
     load_environment_descriptor,
     write_environment_descriptor,
 )
-from imread_benchmark.platforms import PlatformDescriptor, load_platform_descriptor, write_platform_descriptor
+from imread_benchmark.platforms import (
+    PlatformDescriptor,
+    capture_current_platform,
+    load_platform_descriptor,
+    platform_comparison_id,
+    platform_location,
+    write_platform_descriptor,
+)
 
 
 def test_environment_descriptor_is_content_addressed_and_tamper_checked(tmp_path: Path) -> None:
@@ -76,3 +83,38 @@ def test_platform_id_uses_stable_identity_but_not_dynamic_runtime(tmp_path: Path
     path.write_text(json.dumps(document))
     with pytest.raises(ValueError, match="platform_id"):
         load_platform_descriptor(path)
+
+
+def test_capture_keeps_zone_as_provenance_not_platform_identity() -> None:
+    first = capture_current_platform(
+        cloud_provider="gcp",
+        machine_type="c4d-standard-16",
+        location="us-central1-a",
+    )
+    second = capture_current_platform(
+        cloud_provider="gcp",
+        machine_type="c4d-standard-16",
+        location="us-central1-b",
+    )
+
+    assert first.platform_id == second.platform_id
+    assert first.provenance == {"location": "us-central1-a"}
+    assert second.provenance == {"location": "us-central1-b"}
+    assert "location" not in first.identity
+
+
+def test_comparison_platform_id_normalizes_legacy_zone_identity() -> None:
+    legacy = PlatformDescriptor.build(
+        identity={"architecture": "x86_64", "location": "us-central1-a", "machine_type": "c4d-standard-16"},
+        runtime={},
+    )
+    current = PlatformDescriptor.build(
+        identity={"architecture": "x86_64", "machine_type": "c4d-standard-16"},
+        runtime={},
+        provenance={"location": "us-central1-b"},
+    )
+
+    assert legacy.platform_id != current.platform_id
+    assert platform_comparison_id(legacy.to_dict()) == current.platform_id
+    assert platform_location(legacy.to_dict()) == "us-central1-a"
+    assert platform_location(current.to_dict()) == "us-central1-b"

@@ -125,7 +125,11 @@ These assignments follow the current
 [Google Cloud machine-family documentation](https://docs.cloud.google.com/compute/docs/general-purpose-machines).
 The captured CPU brand, family/model/stepping, architecture, VM type, zone, and
 logical CPU count remain the evidence source; the marketing series name is not
-used as a substitute for runtime provenance.
+used as a substitute for runtime provenance. Zone is execution provenance, not
+a platform-identity factor: capacity may move a run between zones. A platform
+group requires matching captured machine type, CPU identity, architecture, and
+logical CPU count. Publication output keeps every raw platform ID and zone, so
+the grouping is inspectable and a zone-specific anomaly remains visible.
 
 For each named CPU platform and each real workload:
 
@@ -190,6 +194,11 @@ Use paired within-block ratios when comparing configurations that share
 platform, workload, support items, protocol, output contract, and repetition.
 Treat differences inside the declared practical margin as practically tied.
 Do not turn overlapping noisy means into a strict ranking sentence.
+
+When a capacity retry moves a run to another zone, retain the zone and complete
+platform descriptor with that run. The run remains in the same platform group
+only when the captured non-zone identity matches. Do not make a zone-level
+performance claim from that grouping.
 
 ## Pilot gates before the full campaign
 

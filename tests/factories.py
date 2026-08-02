@@ -10,13 +10,15 @@ from imread_benchmark.plans import RunConfiguration
 from imread_benchmark.platforms import PlatformDescriptor
 
 
-def valid_bundle_data(
+def valid_bundle_data(  # noqa: PLR0913
     *,
     protocol_id: str = "decode-memory",
     decoder_id: str = "pillow",
     block_position: int = 0,
     repetition: int = 0,
     elapsed_seconds: tuple[float, float] = (2.0, 1.0),
+    platform_identity: dict[str, object] | None = None,
+    platform_provenance: dict[str, object] | None = None,
 ) -> tuple[str, BundleData]:
     is_loader = protocol_id == "loader-supply"
     configuration = RunConfiguration(
@@ -49,8 +51,9 @@ def valid_bundle_data(
         native_backends={},
     )
     platform = PlatformDescriptor.build(
-        identity={"architecture": "fixture", "logical_cpu_count": 1, "machine_type": "fixture"},
+        identity=platform_identity or {"architecture": "fixture", "logical_cpu_count": 1, "machine_type": "fixture"},
         runtime={"kernel": "fixture"},
+        provenance=platform_provenance,
     )
     identity = RunIdentity(
         plan_id="a" * 64,
