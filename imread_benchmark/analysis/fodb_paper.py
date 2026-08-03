@@ -1076,10 +1076,11 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
     robustness_audit = evidence["recommendations"]["robustness_audit"]
     empty_dht = robustness_audit["categories"]["empty_dht_bitstream"]
     four_component = robustness_audit["categories"]["four_component_rgb"]
+    universal_recommendations = evidence["recommendations"]["universal_recommendations"]
     lines = [
         "# Generated FODB evidence",
         "",
-        "All values below are generated from the two exact evidence plan IDs in `fodb_evidence.json`.",
+        "All values below are generated from the exact evidence plan IDs in `fodb_evidence.json`.",
         "Recommendation analysis first keeps decoders within 10% of the local loader leader, "
         "then applies separate empty-DHT bitstream and four-component RGB robustness tests.",
         "The 10% margin is a reporting policy, not a hypothesis test.",
@@ -1103,11 +1104,17 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
             "",
             "## Deployment recommendation",
             "",
-            f"Portable decoder: `{evidence['recommendations']['portable_decoder']}`; ",
-            f"maximum aggregate gap from the local loader leader: "
-            f"{evidence['recommendations']['portable_max_gap_percent']:.2f}%.",
-            f" Decoders that qualify in all eight cells: "
-            f"{', '.join(f'`{decoder}`' for decoder in evidence['recommendations']['universal_recommendations'])}.",
+            (
+                f"Universal recommendation: {', '.join(f'`{decoder}`' for decoder in universal_recommendations)}."
+                if universal_recommendations
+                else (
+                    "No decoder both passes the robustness audit and remains within 10% "
+                    "of the leader in all eight cells."
+                )
+            ),
+            f" Robust minimax candidate (not a universal 10% recommendation): "
+            f"`{evidence['recommendations']['portable_decoder']}`; maximum aggregate gap from the local loader "
+            f"leader: {evidence['recommendations']['portable_max_gap_percent']:.2f}%.",
             f" Portable speed shortlist before the robustness gate: "
             f"{', '.join(f'`{decoder}`' for decoder in evidence['recommendations']['portable_speed_candidates'])}.",
             "",
