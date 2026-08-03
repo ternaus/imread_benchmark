@@ -162,18 +162,19 @@ Use an adaptive second stage only when a pilot shows one of these conditions:
   mechanism worth isolating.
 
 Extend one boundary at a time. First add `12` only for the affected decoder ×
-platform × workload cells, with the same repetition policy. After those results
-are complete, add `16` only for the subset whose highest observed mean over
-`{0,2,4,8,12}` is at `12`. This is a targeted mechanism experiment, not a
-post-hoc replacement for the declared core matrix.
+platform × workload cells, with the same repetition policy. This is a targeted
+mechanism experiment, not a post-hoc replacement for the declared core matrix.
 
 Freeze each follow-up stage before observing its new worker count. A cell enters
 the `workers=12` stage when its controlled-thread loader configuration has its
 highest observed mean at `workers=8` over the completed `{0,2,4,8}` matrix. The
 stage adds five fresh-process repetitions at `workers=12` and leaves every
-other cell unchanged. Only those selected cells are then eligible for a
-possible `workers=16` stage, and only when their highest observed mean after the
-first extension is at `workers=12`.
+other cell unchanged. Before launching a possible `workers=16` stage, freeze a
+material and repeat-consistent stopping rule: the mean at 12 must exceed the
+mean at 8 by at least 5%, and all five paired 12/8 block ratios must be at
+least one. This avoids spending a second extension on a numerically maximal but
+practically flat boundary. It is an operational follow-up rule, not a
+statistical-significance claim.
 
 The completed FODB matrix selects 87 of 96 controlled decoder × platform ×
 workload cells for the first extension, for 435 additional bundles. The
@@ -186,11 +187,16 @@ checked-in follow-up templates encode the frozen `workers=12` selection:
 | FODB-native, Intel 8581C | 8 | `fodb-worker-followup-native-intel.template.yaml` |
 | FODB-native, AMD Zen 4 | 7 | `fodb-worker-followup-native-zen4.template.yaml` |
 
-This stage tests whether the selected curves continue rising beyond eight
-workers. A later `workers=16` stage is conditional on the observed boundary at
-12; it is not launched for all 87 cells by default. Neither stage turns the
-naturally heterogeneous FODB workloads into a causal test of resolution or
-JPEG quality.
+The completed 12-worker stage selected 58 configurations for 16 workers, or
+290 fresh-process bundles: all 48 FODB-mixed cells, eight Intel-native cells,
+and the two Axion-native cells for `ajpegli` and Pillow. Native Zen 4 and Zen 5
+cells did not meet the rule. The corresponding checked-in templates are
+`fodb-worker-followup-w16-mixed.template.yaml`,
+`fodb-worker-followup-w16-native-intel.template.yaml`, and
+`fodb-worker-followup-w16-native-axion.template.yaml`.
+
+Neither stage turns the naturally heterogeneous FODB workloads into a causal
+test of resolution or JPEG quality.
 
 Every plan declares `execution.maximum_memory_fraction`. Campaign preflight
 conservatively counts resident compressed-byte replicas (including `spawn` or

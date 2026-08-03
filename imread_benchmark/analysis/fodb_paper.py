@@ -19,6 +19,9 @@ WORKER12_ALL_NATIVE_PLAN_ID = "4af3621c0fc5b75525a54eb4bc7171cb5399938b8515ea2c9
 WORKER12_ALL_MIXED_PLAN_ID = "1ad7306a07a7d23a602a5a74230e2d4edf5a0aaa55a61184fceb4718b64496f9"
 WORKER12_INTEL_NATIVE_PLAN_ID = "c2f9038c67be2282d9aa15511bb57e93f1e9f80e86c392d77aaa6ddcd3d4cf54"
 WORKER12_ZEN4_NATIVE_PLAN_ID = "a0e63ca15064755badb98b9b466eda3f9716f39f1515fae5e0b65fb74e6ade74"
+WORKER16_MIXED_PLAN_ID = "eeef8895e513b6051c641ec49b97cea3d7878b08b0a2677d519eb2c70310f5e9"
+WORKER16_INTEL_NATIVE_PLAN_ID = "4e5cba9f0d95976fd11638cbc71a22d018f044cb80cc89057cefd25ca5180f68"
+WORKER16_AXION_NATIVE_PLAN_ID = "e246e31630e83ec09bf77c2f728c5ae3169d8717b630326e3ef568e418db193f"
 RUNNER_REVISION = "52a0bea5a2f44079883c9a41472b3add285955f2b471c37674ddd2fb5d4da6ff"
 
 BASE_PLAN_WORKLOADS = {NATIVE_PLAN_ID: "fodb-native", MIXED_PLAN_ID: "fodb-mixed"}
@@ -28,7 +31,12 @@ WORKER12_PLAN_WORKLOADS = {
     WORKER12_INTEL_NATIVE_PLAN_ID: "fodb-native",
     WORKER12_ZEN4_NATIVE_PLAN_ID: "fodb-native",
 }
-PLAN_WORKLOADS = BASE_PLAN_WORKLOADS | WORKER12_PLAN_WORKLOADS
+WORKER16_PLAN_WORKLOADS = {
+    WORKER16_MIXED_PLAN_ID: "fodb-mixed",
+    WORKER16_INTEL_NATIVE_PLAN_ID: "fodb-native",
+    WORKER16_AXION_NATIVE_PLAN_ID: "fodb-native",
+}
+PLAN_WORKLOADS = BASE_PLAN_WORKLOADS | WORKER12_PLAN_WORKLOADS | WORKER16_PLAN_WORKLOADS
 EXPECTED_MACHINES = (
     "c4-standard-16",
     "c3d-standard-16",
@@ -43,8 +51,9 @@ PLATFORM_LABELS = {
 }
 EXPECTED_REPETITIONS = tuple(range(5))
 BASE_WORKERS = (0, 2, 4, 8)
-WORKER_GRID = (*BASE_WORKERS, 12)
-DEPLOYMENT_WORKERS = (4, 8, 12)
+WORKER12_DECISION_GRID = (*BASE_WORKERS, 12)
+WORKER_GRID = (*WORKER12_DECISION_GRID, 16)
+DEPLOYMENT_WORKERS = (4, 8, 12, 16)
 EXPECTED_ITEM_COUNTS = {"fodb-native": 324, "fodb-mixed": 1944}
 EXPECTED_TIMED_ITEM_COUNTS = {"fodb-native": 324, "fodb-mixed": 1668}
 CONTROLLED_THREADS = {"opencv": 1, "pyvips": 1, "torchvision": 1}
@@ -99,6 +108,25 @@ WORKER12_PLAN_SCOPES: dict[str, dict[tuple[str, str], tuple[str, ...]]] = {
         ("fodb-native", "c3d-standard-16"): WORKER12_DECODERS[("fodb-native", "c3d-standard-16")],
     },
 }
+WORKER16_DECODERS = {
+    **{("fodb-mixed", machine_type): ALL_DECODERS for machine_type in EXPECTED_MACHINES},
+    ("fodb-native", "c4-standard-16"): WORKER12_DECODERS[("fodb-native", "c4-standard-16")],
+    ("fodb-native", "c4a-standard-16"): ("ajpegli", "pillow"),
+    ("fodb-native", "c3d-standard-16"): (),
+    ("fodb-native", "c4d-standard-16"): (),
+}
+WORKER16_PLAN_SCOPES: dict[str, dict[tuple[str, str], tuple[str, ...]]] = {
+    WORKER16_MIXED_PLAN_ID: {("fodb-mixed", machine_type): ALL_DECODERS for machine_type in EXPECTED_MACHINES},
+    WORKER16_INTEL_NATIVE_PLAN_ID: {
+        ("fodb-native", "c4-standard-16"): WORKER16_DECODERS[("fodb-native", "c4-standard-16")],
+    },
+    WORKER16_AXION_NATIVE_PLAN_ID: {
+        ("fodb-native", "c4a-standard-16"): WORKER16_DECODERS[("fodb-native", "c4a-standard-16")],
+    },
+}
+FOLLOWUP_PLAN_SCOPES = WORKER12_PLAN_SCOPES | WORKER16_PLAN_SCOPES
+FOLLOWUP_PLAN_WORKERS = dict.fromkeys(WORKER12_PLAN_SCOPES, 12) | dict.fromkeys(WORKER16_PLAN_SCOPES, 16)
+WORKER16_MINIMUM_GAIN = 0.05
 PRIMARY_DECODERS = ("pillow", "opencv", "simplejpeg", "torchvision")
 MIGRATION_DECODERS = ("pillow", "opencv", "simplejpeg")
 PRACTICAL_MARGIN = 0.10
@@ -242,8 +270,9 @@ def build_paper_assets(*, artifact_root: Path, package_path: Path, output_root: 
 
 def _validate_and_measure(records: tuple[RunBundleRecord, ...], package: dict[str, Any]) -> tuple[Measurement, ...]:
     base_total = len(BASE_PLAN_WORKLOADS) * len(EXPECTED_MACHINES) * 75 * len(EXPECTED_REPETITIONS)
-    followup_total = sum(len(decoders) * len(EXPECTED_REPETITIONS) for decoders in WORKER12_DECODERS.values())
-    expected_total = base_total + followup_total
+    worker12_total = sum(len(decoders) * len(EXPECTED_REPETITIONS) for decoders in WORKER12_DECODERS.values())
+    worker16_total = sum(len(decoders) * len(EXPECTED_REPETITIONS) for decoders in WORKER16_DECODERS.values())
+    expected_total = base_total + worker12_total + worker16_total
     if len(records) != expected_total:
         raise PaperAssetError(f"expected {expected_total} evidence bundles, found {len(records)}")
 
@@ -261,12 +290,15 @@ def _validate_and_measure(records: tuple[RunBundleRecord, ...], package: dict[st
     cell_counts: Counter[tuple[str, str, str]] = Counter()
     configuration_repetitions: dict[tuple[str, str, str], set[int]] = defaultdict(set)
     worker12_decoders: dict[tuple[str, str], set[str]] = defaultdict(set)
+    worker16_decoders: dict[tuple[str, str], set[str]] = defaultdict(set)
     for record in records:
         measurement = _measurement(record, manifest_ids)
         measurements.append(measurement)
         cell_counts[(measurement.workload, measurement.machine_type, measurement.protocol)] += 1
         if measurement.protocol == "loader-supply" and measurement.workers == 12:
             worker12_decoders[(measurement.workload, measurement.machine_type)].add(measurement.decoder)
+        if measurement.protocol == "loader-supply" and measurement.workers == 16:
+            worker16_decoders[(measurement.workload, measurement.machine_type)].add(measurement.decoder)
         config_id = _required_string(record.config, "config_id")
         configuration_repetitions[(measurement.workload, measurement.machine_type, config_id)].add(
             measurement.repetition,
@@ -276,6 +308,9 @@ def _validate_and_measure(records: tuple[RunBundleRecord, ...], package: dict[st
     for cell, expected_decoders in WORKER12_DECODERS.items():
         if worker12_decoders[cell] != set(expected_decoders):
             raise PaperAssetError(f"workers=12 decoder selection does not match the frozen follow-up for {cell}")
+    for cell, expected_decoders in WORKER16_DECODERS.items():
+        if worker16_decoders[cell] != set(expected_decoders):
+            raise PaperAssetError(f"workers=16 decoder selection does not match the frozen follow-up for {cell}")
     return tuple(measurements)
 
 
@@ -286,14 +321,15 @@ def _measurement(record: RunBundleRecord, manifest_ids: dict[str, str]) -> Measu
     machine_type = _required_string(_required_object(record.platform, "identity"), "machine_type")
     if machine_type not in EXPECTED_MACHINES:
         raise PaperAssetError(f"unexpected machine type {machine_type!r}")
-    if plan_id in WORKER12_PLAN_SCOPES:
-        eligible_decoders = WORKER12_PLAN_SCOPES[plan_id].get((workload, machine_type))
+    if plan_id in FOLLOWUP_PLAN_SCOPES:
+        eligible_decoders = FOLLOWUP_PLAN_SCOPES[plan_id].get((workload, machine_type))
+        followup_workers = FOLLOWUP_PLAN_WORKERS[plan_id]
         decoder = _required_string(config, "decoder_id")
         requested_threads = _optional_int(config, "requested_threads")
         followup_checks = (
             (eligible_decoders is not None, "follow-up plan/platform mismatch"),
             (config.get("protocol_id") == "loader-supply", "follow-up protocol is not loader-supply"),
-            (config.get("num_workers") == 12, "follow-up worker count is not 12"),
+            (config.get("num_workers") == followup_workers, "follow-up worker count is unexpected"),
             (eligible_decoders is not None and decoder in eligible_decoders, "decoder was not eligible for follow-up"),
             (requested_threads == CONTROLLED_THREADS.get(decoder), "follow-up thread profile is not controlled"),
         )
@@ -338,7 +374,9 @@ def _validate_matrix_counts(
         for machine_type in EXPECTED_MACHINES:
             if cell_counts[(workload, machine_type, "decode-memory")] != 75:
                 raise PaperAssetError(f"incomplete decode-memory matrix for {workload}/{machine_type}")
-            followup_count = len(WORKER12_DECODERS[(workload, machine_type)]) * len(EXPECTED_REPETITIONS)
+            worker12_count = len(WORKER12_DECODERS[(workload, machine_type)]) * len(EXPECTED_REPETITIONS)
+            worker16_count = len(WORKER16_DECODERS[(workload, machine_type)]) * len(EXPECTED_REPETITIONS)
+            followup_count = worker12_count + worker16_count
             if cell_counts[(workload, machine_type, "loader-supply")] != 300 + followup_count:
                 raise PaperAssetError(f"incomplete loader-supply matrix for {workload}/{machine_type}")
     expected_repetitions = set(EXPECTED_REPETITIONS)
@@ -409,7 +447,9 @@ def _decision_rows(aggregates: tuple[Aggregate, ...]) -> list[dict[str, Any]]:
             )
             decode = tuple(row for row in block if row.protocol == "decode-memory")
             loader = tuple(row for row in block if row.protocol == "loader-supply")
-            expected_loader_count = 48 + len(WORKER12_DECODERS[(workload, machine_type)])
+            expected_loader_count = (
+                48 + len(WORKER12_DECODERS[(workload, machine_type)]) + len(WORKER16_DECODERS[(workload, machine_type)])
+            )
             if len(decode) != 12 or len(loader) != expected_loader_count:
                 raise PaperAssetError(f"controlled-thread block is incomplete for {workload}/{machine_type}")
             decode_leader = _best(decode)
@@ -748,9 +788,9 @@ def _worker16_candidate_rows(
                 and row.protocol == "loader-supply"
                 and row.decoder == decoder
                 and row.requested_threads == CONTROLLED_THREADS.get(decoder)
-                and row.workers in WORKER_GRID
+                and row.workers in WORKER12_DECISION_GRID
             )
-            expected_workers = set(WORKER_GRID)
+            expected_workers = set(WORKER12_DECISION_GRID)
             if len(curve) != len(expected_workers) or {row.workers for row in curve} != expected_workers:
                 raise PaperAssetError(
                     f"workers=12 follow-up curve is incomplete for {workload}/{machine_type}/{decoder}",
@@ -759,16 +799,25 @@ def _worker16_candidate_rows(
                 aggregates,
                 (workload, machine_type, "loader-supply", decoder, CONTROLLED_THREADS.get(decoder), 12),
             )
-            previous_best = _best(tuple(row for row in curve if row.workers in BASE_WORKERS))
             worker8 = _only(
                 aggregates,
                 (workload, machine_type, "loader-supply", decoder, CONTROLLED_THREADS.get(decoder), 8),
             )
-            if worker12.mean >= previous_best.mean:
+            paired_gain_ratios = tuple(
+                worker12_value / worker8_value
+                for worker12_value, worker8_value in zip(
+                    worker12.raw_run_means,
+                    worker8.raw_run_means,
+                    strict=True,
+                )
+            )
+            gain_from_workers_8 = worker12.mean / worker8.mean - 1
+            if gain_from_workers_8 >= WORKER16_MINIMUM_GAIN and min(paired_gain_ratios) >= 1:
                 selected.append(
                     {
                         "decoder": decoder,
-                        "gain_from_workers_8_percent": (worker12.mean / worker8.mean - 1) * 100,
+                        "gain_from_workers_8_percent": gain_from_workers_8 * 100,
+                        "minimum_paired_gain_ratio": min(paired_gain_ratios),
                         "workers_12_images_per_second": worker12.mean,
                     },
                 )
@@ -785,7 +834,11 @@ def _worker16_candidate_rows(
         "bundle_count_if_launched": candidate_count * len(EXPECTED_REPETITIONS),
         "candidate_count": candidate_count,
         "cells": cells,
-        "criterion": "workers=12 has the highest observed mean over workers={0,2,4,8,12}",
+        "criterion": (
+            "workers=12 is at least 5% faster than workers=8 by the five-block mean "
+            "and every paired workers=12/workers=8 block has a ratio of at least 1"
+        ),
+        "minimum_mean_gain_percent": WORKER16_MINIMUM_GAIN * 100,
         "repetitions_if_launched": len(EXPECTED_REPETITIONS),
     }
 
@@ -825,6 +878,11 @@ def _evidence_document(
                 f"{workload}/{machine_type}": list(decoders)
                 for (workload, machine_type), decoders in sorted(WORKER12_DECODERS.items())
             },
+            "workers_16_decoders": {
+                f"{workload}/{machine_type}": list(decoders)
+                for (workload, machine_type), decoders in sorted(WORKER16_DECODERS.items())
+                if decoders
+            },
         },
         "pillow_migration": sections["pillow_migration"],
         "recommendations": sections["recommendations"],
@@ -834,7 +892,7 @@ def _evidence_document(
             "run_keys": run_keys,
             "run_keys_sha256": _sequence_digest(run_keys),
         },
-        "schema_version": "1.5",
+        "schema_version": "1.6",
         "thread_controls": sections["thread_controls"],
         "worker_transfer": sections["worker_transfer"],
         "worker16_candidates": sections["worker16_candidates"],
@@ -1356,6 +1414,8 @@ def _plot_worker_scaling(aggregates: tuple[Aggregate, ...], destination: Path) -
                 expected_workers = set(BASE_WORKERS)
                 if decoder in WORKER12_DECODERS[(workload, machine_type)]:
                     expected_workers.add(12)
+                if decoder in WORKER16_DECODERS[(workload, machine_type)]:
+                    expected_workers.add(16)
                 curve_workers = [point.workers for point in curve if point.workers is not None]
                 if set(curve_workers) != expected_workers or len(curve_workers) != len(expected_workers):
                     raise PaperAssetError(f"worker curve is incomplete for {workload}/{machine_type}/{decoder}")
