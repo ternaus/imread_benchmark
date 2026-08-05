@@ -251,6 +251,10 @@ def build_paper_assets(*, artifact_root: Path, package_path: Path, output_root: 
         _recommendation_table(recommendations),
     )
     _write_text(
+        generated_dir / "table_fodb_cell_recommendations.tex",
+        _cell_recommendation_table(recommendations),
+    )
+    _write_text(
         generated_dir / "table_fodb_decoder_coverage.tex",
         _decoder_coverage_table(recommendations),
     )
@@ -854,6 +858,11 @@ def _evidence_document(
     return {
         "aggregates": [_aggregate_dict(row) for row in aggregates],
         "coverage": {
+            "bundles_by_workload": dict(
+                sorted(
+                    Counter(PLAN_WORKLOADS[_required_string(record.config, "plan_id")] for record in records).items(),
+                ),
+            ),
             "committed_evidence_bundles": len(records),
             "expected_repetitions_per_configuration": len(EXPECTED_REPETITIONS),
             "manifest_items": EXPECTED_ITEM_COUNTS,
@@ -1244,9 +1253,9 @@ def _recommendation_table(recommendations: dict[str, Any]) -> str:
         audited_successes = successes[decoder]
         audit = f"{audited_successes}/{ROBUSTNESS_AUDIT_ITEM_COUNT}"
         if decoder == portable_decoder:
-            decision = "portable default"
+            decision = "robust minimax"
         elif decoder in universal:
-            decision = "portable alternative"
+            decision = r"universal 10\% tier"
         elif decoder in portable_speed:
             decision = "audit target corpus"
         else:
@@ -1254,6 +1263,23 @@ def _recommendation_table(recommendations: dict[str, Any]) -> str:
         body.append(
             f"\\texttt{{{decoder}}} & {worst_gaps[decoder]:.1f}\\% & {audit} & {decision} ",
         )
+    return (r"\\" + "\n").join(body) + "\n"
+
+
+def _cell_recommendation_table(recommendations: dict[str, Any]) -> str:
+    body = []
+    for cell in recommendations["cells"]:
+        accepted = [row for row in cell["decoders"] if row["recommended"]]
+        if not accepted:
+            raise PaperAssetError(
+                f"no audited 10% recommendation for {cell['workload']}/{cell['machine_type']}",
+            )
+        choices = ", ".join(
+            f"\\texttt{{{row['decoder']}}} ($w={row['workers']}$; {row['gap_from_leader_percent']:.1f}\\%)"
+            for row in sorted(accepted, key=lambda row: (row["gap_from_leader_percent"], row["decoder"]))
+        )
+        leader = f"\\texttt{{{cell['leader']}}} ($w={cell['leader_workers']}$)"
+        body.append(f"{cell['platform']} & {_latex_workload(cell['workload'])} & {choices} & {leader} ")
     return (r"\\" + "\n").join(body) + "\n"
 
 
@@ -1308,10 +1334,11 @@ def _worker_transfer_table(rows: list[dict[str, Any]]) -> str:
     for row in rows:
         native = row["native_peak_worker_counts"]
         mixed = row["mixed_peak_worker_counts"]
+        native_counts = ", ".join(f"$w={workers}$: {count}" for workers, count in sorted(native.items()))
+        mixed_counts = ", ".join(f"$w={workers}$: {count}" for workers, count in sorted(mixed.items()))
         changed = ", ".join(f"\\texttt{{{decoder}}}" for decoder in row["changed_decoders"]) or "none"
         body.append(
-            f"{row['platform']} & {native.get(0, 0)} / {native.get(8, 0)} & "
-            f"{mixed.get(0, 0)} / {mixed.get(8, 0)} & {len(row['changed_decoders'])}/12 & {changed} ",
+            f"{row['platform']} & {native_counts} & {mixed_counts} & {len(row['changed_decoders'])}/12 & {changed} ",
         )
     return (r"\\" + "\n").join(body) + "\n"
 
@@ -1321,12 +1348,12 @@ def _coverage_table(evidence: dict[str, Any]) -> str:
     native = (
         f"FODB-native & {coverage['timed_common_support_items']['fodb-native']:,} / "
         f"{coverage['manifest_items']['fodb-native']:,} "
-        "& 0 & 1,500 "
+        f"& 0 & {coverage['bundles_by_workload']['fodb-native']:,} "
     )
     mixed = (
         f"FODB-mixed & {coverage['timed_common_support_items']['fodb-mixed']:,} / "
         f"{coverage['manifest_items']['fodb-mixed']:,} "
-        "& 0 & 1,500 "
+        f"& 0 & {coverage['bundles_by_workload']['fodb-mixed']:,} "
     )
     return native + r"\\" + "\n" + mixed + "\n"
 

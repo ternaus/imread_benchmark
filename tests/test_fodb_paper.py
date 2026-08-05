@@ -16,6 +16,7 @@ from imread_benchmark.analysis.fodb_paper import (
     WORKER16_DECODERS,
     WORKER16_PLAN_SCOPES,
     Aggregate,
+    _cell_recommendation_table,
     _decoder_coverage_table,
     _linear_quantile,
     _ranks,
@@ -259,3 +260,28 @@ def test_recommendations_require_complete_robustness_audit() -> None:
     assert recommendations["portable_speed_candidates"] == ["imagecodecs", "simplejpeg"]
     assert recommendations["universal_recommendations"] == ["simplejpeg"]
     assert all("imagecodecs" not in cell["recommended"] for cell in recommendations["cells"])
+
+
+def test_cell_recommendation_table_exposes_audited_choices_and_workers() -> None:
+    table = _cell_recommendation_table(
+        {
+            "cells": [
+                {
+                    "decoders": [
+                        {"decoder": "pillow", "gap_from_leader_percent": 2.0, "recommended": True, "workers": 12},
+                        {"decoder": "opencv", "gap_from_leader_percent": 8.0, "recommended": True, "workers": 16},
+                        {"decoder": "turbojpeg", "gap_from_leader_percent": 0.0, "recommended": False, "workers": 16},
+                    ],
+                    "leader": "turbojpeg",
+                    "leader_workers": 16,
+                    "machine_type": "c4-standard-16",
+                    "platform": "Intel 8581C",
+                    "workload": "fodb-mixed",
+                },
+            ],
+        },
+    )
+
+    assert r"\texttt{pillow} ($w=12$; 2.0\%)" in table
+    assert r"\texttt{opencv} ($w=16$; 8.0\%)" in table
+    assert r"\texttt{turbojpeg} ($w=16$)" in table
