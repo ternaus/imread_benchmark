@@ -21,21 +21,6 @@ class PyVipsDecoder(BaseDecoder):
 
     name = "pyvips"
     package_name = "pyvips"
-    # libvips spawns a GLib worker threadpool at module import. PyTorch
-    # DataLoader with num_workers>0 forks the parent; the child inherits
-    # pthread IDs but not the threads themselves → first libvips call in the
-    # worker deadlocks waiting on a thread that doesn't exist.
-    #
-    # Originally scoped to Linux/aarch64 with a "x86 + macOS get away with
-    # it" caveat — empirically wrong: c4-standard-16 (Intel, 16 vCPU) hung
-    # at workers=2. More vCPUs ⇒ larger libvips threadpool ⇒ more
-    # opportunities for the fork race.
-    #
-    # `multiprocessing_context='spawn'` would dodge it but pays full Python
-    # re-import per worker, which is not how anyone runs pyvips in practice
-    # — the resulting numbers would be misleading. The honest finding is
-    # "pyvips is incompatible with the default fork-based DataLoader".
-    in_dataloader = False
 
     def decode(self, data: bytes) -> np.ndarray:
         import pyvips

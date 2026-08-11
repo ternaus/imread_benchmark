@@ -1,0 +1,29 @@
+schema_version: "2.0"
+experiment_name: fodb-WORKLOAD_ID-tensorflow
+seed: 20260729
+repetitions: 5
+dataset:
+  descriptor: /data/datasets/PACKAGE_ID/package.json
+  package_id: PACKAGE_ID
+  workload_id: WORKLOAD_ID
+  manifest_id: MANIFEST_ID
+  selection:
+    method: all
+    expected_items: ITEM_COUNT
+  logical_repeat_factor: 1
+matrix:
+  decoders:
+    tensorflow: {threads: [default, 1]}
+  protocols:
+    decode-memory: {}
+measurement:
+  warmup_passes: 1
+  timed_passes_per_run: 1
+  minimum_timed_seconds: 1.0
+  output_contract: normalized-rgb
+  support_policy: operational
+execution:
+  per_run_subprocess: true
+  run_timeout_seconds: 3600
+  checkpoint_each_run: true
+  maximum_memory_fraction: 0.6

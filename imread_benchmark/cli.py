@@ -1,412 +1,379 @@
-"""
-imread-benchmark CLI — orchestrator that owns venv setup + benchmark dispatch.
-
-Replaces run_benchmarks.sh / run_dataloader_benchmarks.sh. Lives in the
-"control plane" venv (anywhere with this package installed); shells out to
-per-group worker venvs under venvs/<group>/ for the actual decode work.
-This split is required because mainstream / tensorflow cannot coexist
-in one Python process (numpy / protobuf pin fights).
-
-Usage:
-    imread-benchmark list-libs
-    imread-benchmark run --data-dir ~/imagenet/val
-    imread-benchmark run --data-dir DATA --mode single --libs opencv,pillow
-    imread-benchmark plot --input output --output docs/assets/benchmarks
-"""
-
 from __future__ import annotations
 
-import datetime as _dt
 import json
-import os
-import platform
-import shutil
-import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import typer
 
-from imread_benchmark.decoders import REGISTRY, BaseDecoder
-from imread_benchmark.utils import get_system_identifier
+from imread_benchmark.analysis.publication import publish
+from imread_benchmark.artifacts import hydrate_committed_runs, validate_run_bundle
+from imread_benchmark.datasets.fodb import prepare_fodb
+from imread_benchmark.datasets.gcs import GcloudObjectStore
+from imread_benchmark.datasets.materializer import materialize_dataset_package, publish_dataset_package
+from imread_benchmark.datasets.package import build_dataset_package
+from imread_benchmark.decoders import REGISTRY
+from imread_benchmark.decoders.capabilities import describe_decoder
+from imread_benchmark.environments import EnvironmentRequest, provision_environment
+from imread_benchmark.environments.cache import materialize_environment_cache, publish_environment_cache
+from imread_benchmark.execution.campaign import CampaignConfig, run_campaign
+from imread_benchmark.execution.coordinator import RemoteCheckpoint
+from imread_benchmark.plans import expand_experiment_plan, instantiate_experiment_plans, load_experiment_plan
+from imread_benchmark.platforms import capture_current_platform, write_platform_descriptor
 
-app = typer.Typer(add_completion=False, help="JPEG decoder benchmark orchestrator.")
-
-VENV_ROOT = Path("venvs")
-DEFAULT_WORKERS = "0,1,2,4,8"
-
-
-# ─── lib / group helpers ──────────────────────────────────────────────────────
-
-
-def _all_lib_names() -> list[str]:
-    return sorted(REGISTRY.keys())
-
-
-def _resolve_libs(libs: str) -> list[str]:
-    if libs.strip() in {"", "all"}:
-        return _all_lib_names()
-    requested = [s.strip() for s in libs.split(",") if s.strip()]
-    unknown = [r for r in requested if r not in REGISTRY]
-    if unknown:
-        typer.echo(f"Unknown library names: {', '.join(unknown)}", err=True)
-        typer.echo(f"Known: {', '.join(_all_lib_names())}", err=True)
-        raise typer.Exit(2)
-    return requested
-
-
-def _group_of(name: str) -> str:
-    return REGISTRY[name].group
+app = typer.Typer(add_completion=False, help="Reproducible JPEG decoder benchmark campaigns.")
+dataset_app = typer.Typer(help="Build, publish, and materialize immutable dataset packages.")
+plan_app = typer.Typer(help="Instantiate, validate, and expand schema-2 experiment plans.")
+environment_app = typer.Typer(help="Provision immutable lock-backed worker environments.")
+platform_app = typer.Typer(help="Capture platform provenance.")
+artifacts_app = typer.Typer(help="Hydrate and validate committed run bundles.")
+campaign_app = typer.Typer(help="Run or resume an isolated benchmark campaign.")
+app.add_typer(dataset_app, name="dataset")
+app.add_typer(plan_app, name="plan")
+app.add_typer(environment_app, name="environment")
+app.add_typer(platform_app, name="platform")
+app.add_typer(artifacts_app, name="artifacts")
+app.add_typer(campaign_app, name="campaign")
 
 
-def _runs_single(name: str) -> bool:
-    return REGISTRY[name].runs_single_here()
+@app.command("list-decoders")
+def list_decoders() -> None:
+    """Print the registered decoder capability contracts as JSON."""
+    _emit_json([describe_decoder(REGISTRY[name]).to_dict() for name in sorted(REGISTRY)])
 
 
-def _runs_dataloader(name: str) -> bool:
-    return REGISTRY[name].runs_dataloader_here()
-
-
-# ─── venv management ──────────────────────────────────────────────────────────
-
-
-def _venv_python(group: str) -> Path:
-    """Path to the python interpreter inside a per-group venv."""
-    bindir = "Scripts" if platform.system() == "Windows" else "bin"
-    suffix = ".exe" if platform.system() == "Windows" else ""
-    return VENV_ROOT / group / bindir / f"python{suffix}"
-
-
-def _ensure_venv(group: str, *, force_reinstall: bool = False) -> Path:
-    """
-    Create venvs/<group>/ and install .[group] into it.
-    Idempotent: if the venv + project are already there, returns the python path immediately.
-    """
-    if shutil.which("uv") is None:
-        typer.echo("FATAL: `uv` not found on PATH. Install it: https://astral.sh/uv", err=True)
-        raise typer.Exit(127)
-
-    py = _venv_python(group)
-    venv_dir = VENV_ROOT / group
-    needs_install = force_reinstall or not py.exists()
-
-    if not py.exists():
-        typer.echo(f"[venv] Creating venvs/{group}/ ...")
-        subprocess.run(
-            ["uv", "venv", str(venv_dir), "--python", "python3", "--seed"],
-            check=True,
-        )
-
-    if needs_install:
-        typer.echo(f"[venv] Installing .[{group}] into venvs/{group}/ ...")
-        env = {**os.environ, "UV_LINK_MODE": "copy"}
-        subprocess.run(
-            ["uv", "pip", "install", "--python", str(py), "-e", f".[{group}]"],
-            check=True,
-            env=env,
-        )
-    else:
-        typer.echo(f"[venv] Reusing venvs/{group}/")
-    return py
-
-
-# ─── worker invocation ────────────────────────────────────────────────────────
-
-
-def _run_worker(py: Path, lib: str, module: str, args: list[str]) -> int:
-    """Execute a benchmark worker module in a per-group venv subprocess."""
-    proc = subprocess.run([str(py), "-m", module, "--library", lib, *args], check=False)
-    return proc.returncode
-
-
-def _query_default_threads(py: Path, lib: str) -> int:
-    """Ask the decoder in its venv how many threads it uses by default."""
-    code = f"from imread_benchmark.decoders import REGISTRY; print(REGISTRY['{lib}']().get_num_threads())"
-    proc = subprocess.run([str(py), "-c", code], check=True, capture_output=True, text=True)
-    return int(proc.stdout.strip())
-
-
-def _run_single_for_lib(
-    py: Path,
-    lib: str,
-    *,
-    data_dir: Path,
-    output_dir: Path,
-    num_images: int,
-    num_runs: int,
-    mode: str,
-) -> bool:
-    """Run single-thread + (optionally) library-default-thread benchmarks. Returns success."""
-    typer.echo(f"  [single, 1 thread] {lib}")
-    rc = _run_worker(
-        py,
-        lib,
-        "imread_benchmark.benchmark_single",
-        [
-            "--data-dir",
-            str(data_dir),
-            "--num-images",
-            str(num_images),
-            "--num-runs",
-            str(num_runs),
-            "--output-dir",
-            str(output_dir),
-            "--mode",
-            mode,
-            "--num-threads",
-            "1",
-        ],
-    )
-    if rc != 0:
-        typer.echo(f"  WARN: 1-thread run failed for {lib} (exit {rc})", err=True)
-        return False
-
-    default_threads = _query_default_threads(py, lib)
-    if default_threads <= 1:
-        typer.echo("  [default = 1 thread, no second pass needed]")
-        return True
-
-    # If the library ignored set_num_threads(1) (e.g. opencv-on-macOS uses GCD),
-    # the 1-thread pass actually ran with `effective_threads != 1`. If that
-    # number already equals what the default would do, the second pass is a
-    # duplicate — skip it.
-    one_t_json = output_dir / get_system_identifier() / f"{lib}_1t_results.json"
-    try:
-        first_eff = int(json.loads(one_t_json.read_text())["effective_threads"])
-    except (FileNotFoundError, KeyError, ValueError, json.JSONDecodeError):
-        first_eff = 1  # be safe, run the second pass
-
-    if first_eff == default_threads:
-        typer.echo(
-            f"  [skip default pass] {lib} ignores set_num_threads "
-            f"(1-thread request → ran with {first_eff}, default also = {default_threads})",
-        )
-        return True
-
-    typer.echo(f"  [single, default = {default_threads} threads] {lib}")
-    rc = _run_worker(
-        py,
-        lib,
-        "imread_benchmark.benchmark_single",
-        [
-            "--data-dir",
-            str(data_dir),
-            "--num-images",
-            str(num_images),
-            "--num-runs",
-            str(num_runs),
-            "--output-dir",
-            str(output_dir),
-            "--mode",
-            mode,
-            "--num-threads",
-            "0",
-        ],
-    )
-    if rc != 0:
-        typer.echo(f"  WARN: default-thread run failed for {lib} (exit {rc})", err=True)
-        return False
-    return True
-
-
-def _run_dataloader_for_lib(
-    py: Path,
-    lib: str,
-    *,
-    data_dir: Path,
-    output_dir: Path,
-    num_images: int,
-    num_runs: int,
-    workers: list[int],
-) -> bool:
-    typer.echo(f"  [dataloader] {lib}  workers={workers}")
-    rc = _run_worker(
-        py,
-        lib,
-        "imread_benchmark.benchmark_dataloader",
-        [
-            "--data-dir",
-            str(data_dir),
-            "--num-images",
-            str(num_images),
-            "--num-runs",
-            str(num_runs),
-            "--output-dir",
-            str(output_dir),
-            "--workers",
-            *(str(w) for w in workers),
-        ],
-    )
-    if rc != 0:
-        typer.echo(f"  WARN: dataloader run failed for {lib} (exit {rc})", err=True)
-    return rc == 0
-
-
-# ─── commands ─────────────────────────────────────────────────────────────────
-
-
-@app.command("list-libs")
-def list_libs() -> None:
-    """List all known decoders and whether they would run on this machine."""
-    sys_str, mach_str = platform.system(), platform.machine()
-    typer.echo(f"Platform: {sys_str} {mach_str}\n")
-    typer.echo(f"{'name':<14} {'group':<12} {'single':<7} {'dataloader':<10}")
-    typer.echo("-" * 50)
-    for name in _all_lib_names():
-        cls: type[BaseDecoder] = REGISTRY[name]
-        s = "yes" if cls.runs_single_here() else "skip"
-        d = "yes" if cls.runs_dataloader_here() else "skip"
-        typer.echo(f"{name:<14} {cls.group:<12} {s:<7} {d:<10}")
-
-
-@app.command("run")
-def run(
-    data_dir: Path = typer.Option(..., "--data-dir", "-d", exists=True, help="Directory of JPEG images"),
-    output_dir: Path = typer.Option(Path("output"), "--output-dir", "-o", help="Where JSON results go"),
-    libs: str = typer.Option("all", "--libs", help="Comma-separated lib names, or 'all'"),
-    mode: str = typer.Option("both", "--mode", help="single | dataloader | both"),
-    num_images: int = typer.Option(50000, "--num-images", "-n"),
-    num_runs: int = typer.Option(20, "--num-runs", "-r", help="Timed runs for the single-thread benchmark"),
-    dataloader_runs: int = typer.Option(5, "--dataloader-runs", help="Timed runs per worker count"),
-    workers: str = typer.Option(DEFAULT_WORKERS, "--workers", help="Comma-separated num_workers values"),
-    decode_mode: str = typer.Option("memory", "--decode-mode", help="memory | disk (single benchmark only)"),
-    skip_setup: bool = typer.Option(False, "--skip-setup", help="Assume venvs/ already populated"),
+@dataset_app.command("package")
+def dataset_package(
+    package_name: str = typer.Option(..., "--name", help="Stable logical package name."),
+    workload: list[str] = typer.Option(
+        ...,
+        "--workload",
+        help="Repeat NAME=JPEG_DIRECTORY for every workload view.",
+    ),
+    output_root: Path = typer.Option(..., "--output-root", help="Content-addressed package cache."),
+    provenance_source: str = typer.Option(..., "--provenance-source"),
 ) -> None:
-    """Benchmark JPEG decoders. Sets up per-group venvs as needed."""
-    if mode not in {"single", "dataloader", "both"}:
-        typer.echo(f"--mode must be single|dataloader|both, got {mode!r}", err=True)
-        raise typer.Exit(2)
+    """Build one deterministic uncompressed-tar dataset package."""
+    workloads = _parse_workloads(workload)
+    descriptor = build_dataset_package(
+        package_name=package_name,
+        workloads=workloads,
+        output_root=output_root,
+        provenance={"source": provenance_source},
+    )
+    _emit_json({"descriptor": str(descriptor), "schema_version": "2.0"})
 
-    requested = _resolve_libs(libs)
-    worker_counts = [int(w) for w in workers.split(",") if w.strip()]
 
-    # Filter by platform predicates per benchmark type.
-    do_single = mode in {"single", "both"}
-    do_dl = mode in {"dataloader", "both"}
+@dataset_app.command("publish")
+def dataset_publish(
+    descriptor: Path = typer.Argument(..., exists=True, dir_okay=False),
+    store_uri: str = typer.Option(..., "--store", help="GCS base URI, for example gs://bucket/benchmark."),
+    prefix: str = typer.Option("datasets", "--prefix"),
+) -> None:
+    """Create-only publish every package component to GCS."""
+    remote_descriptor = publish_dataset_package(
+        descriptor,
+        store=GcloudObjectStore(store_uri),
+        prefix=prefix,
+    )
+    _emit_json({"remote_descriptor": remote_descriptor, "schema_version": "2.0", "store": store_uri})
 
-    single_libs = [name for name in requested if do_single and _runs_single(name)]
-    dl_libs = [name for name in requested if do_dl and _runs_dataloader(name)]
-    all_libs = sorted(set(single_libs) | set(dl_libs))
-    skipped = sorted(set(requested) - set(all_libs))
 
-    typer.echo("─" * 60)
-    typer.echo(f"Data dir   : {data_dir}")
-    typer.echo(f"Output dir : {output_dir}")
-    typer.echo(f"Mode       : {mode}")
-    typer.echo(f"Images     : {num_images}")
-    typer.echo(f"Runs       : single={num_runs}  dataloader={dataloader_runs}")
-    typer.echo(f"Workers    : {worker_counts}")
-    typer.echo(f"Libs (run) : {', '.join(all_libs) or '(none)'}")
-    if skipped:
-        typer.echo(f"Skipped    : {', '.join(skipped)}  (platform-incompatible for chosen mode)")
-    typer.echo("─" * 60)
+@dataset_app.command("fodb-package")
+def dataset_fodb_package(
+    archive: list[Path] = typer.Option(..., "--archive", exists=True, dir_okay=False),
+    output_root: Path = typer.Option(..., "--output-root", file_okay=False),
+    scene_count: int = typer.Option(12, "--scene-count", min=1),
+    seed: int = typer.Option(20260729, "--seed"),
+    compressed_byte_limit: int = typer.Option(2 * 1024**3, "--compressed-byte-limit", min=1),
+) -> None:
+    """Build canonical native/mixed FODB workloads directly from downloaded ZIP parts."""
+    descriptor = prepare_fodb(
+        archive,
+        output_root,
+        scene_count=scene_count,
+        seed=seed,
+        compressed_byte_limit=compressed_byte_limit,
+    )
+    _emit_json({"descriptor": str(descriptor), "schema_version": "2.0"})
 
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Ensure the venv for each group we'll use.
-    needed_groups = sorted({_group_of(name) for name in all_libs})
-    venv_python: dict[str, Path] = {}
-    for g in needed_groups:
-        venv_python[g] = _ensure_venv(g, force_reinstall=False) if not skip_setup else _venv_python(g)
+@dataset_app.command("controlled-package")
+def dataset_controlled_package(
+    source_dir: Path = typer.Option(..., "--source-dir", exists=True, file_okay=False),
+    output_root: Path = typer.Option(..., "--output-root", file_okay=False),
+    source_name: str = typer.Option(..., "--source-name"),
+    source_release: str = typer.Option(..., "--source-release"),
+    source_license: str = typer.Option(..., "--source-license"),
+    source_url: str | None = typer.Option(None, "--source-url"),
+    long_edge: list[int] = typer.Option([512, 1024, 2048], "--long-edge", min=1),
+    quality: list[int] = typer.Option([50, 75, 90, 95], "--quality", min=1, max=95),
+    include_native: bool = typer.Option(True, "--include-native/--no-native"),
+    subsampling: str = typer.Option("4:2:0", "--subsampling"),
+    seed: int = typer.Option(20260729, "--seed"),
+    compressed_byte_limit: int = typer.Option(2 * 1024**3, "--compressed-byte-limit", min=1),
+) -> None:
+    """Build matched resolution-by-quality workloads from pinned lossless PNGs."""
+    from imread_benchmark.datasets.controlled import prepare_controlled_ablation
 
-    failures: list[str] = []
+    descriptor = prepare_controlled_ablation(
+        source_dir,
+        output_root,
+        source_name=source_name,
+        source_release=source_release,
+        source_license=source_license,
+        source_url=source_url,
+        long_edges=long_edge,
+        qualities=quality,
+        include_native=include_native,
+        subsampling=subsampling,
+        seed=seed,
+        compressed_byte_limit=compressed_byte_limit,
+    )
+    _emit_json({"descriptor": str(descriptor), "schema_version": "2.0"})
 
-    # Iterate libs grouped by their venv to maximise locality (helps log scanning).
-    for group in needed_groups:
-        py = venv_python[group]
-        libs_in_group = [name for name in all_libs if _group_of(name) == group]
 
-        for lib in libs_in_group:
-            typer.echo(f"\n=== {lib} (group={group}) ===")
-            if lib in single_libs and not _run_single_for_lib(
-                py,
-                lib,
-                data_dir=data_dir,
-                output_dir=output_dir,
-                num_images=num_images,
-                num_runs=num_runs,
-                mode=decode_mode,
-            ):
-                failures.append(f"{lib}/single")
-            if lib in dl_libs and not _run_dataloader_for_lib(
-                py,
-                lib,
-                data_dir=data_dir,
-                output_dir=output_dir,
-                num_images=num_images,
-                num_runs=dataloader_runs,
-                workers=worker_counts,
-            ):
-                failures.append(f"{lib}/dataloader")
+@dataset_app.command("materialize")
+def dataset_materialize(
+    remote_descriptor: str = typer.Argument(..., help="Object key returned by dataset publish."),
+    store_uri: str = typer.Option(..., "--store", help="GCS base URI used for publication."),
+    cache_root: Path = typer.Option(..., "--cache-root"),
+) -> None:
+    """Download, fully verify, and atomically publish a local package cache entry."""
+    descriptor = materialize_dataset_package(
+        remote_descriptor,
+        store=GcloudObjectStore(store_uri),
+        cache_root=cache_root,
+    )
+    _emit_json({"descriptor": str(descriptor), "schema_version": "2.0"})
 
-    typer.echo("\n" + "─" * 60)
-    if failures:
-        typer.echo(f"Done with {len(failures)} per-decoder failure(s) — other decoders' results are intact:")
-        for f in failures:
-            typer.echo(f"  - {f}")
-    else:
-        typer.echo("All benchmarks completed successfully.")
 
-    # Persist a machine-readable summary so the cloud orchestrator can tell
-    # "all decoders finished cleanly" from "9 of 12 finished, 3 failed but
-    # their JSONs are missing/partial". Without this the only signal is the
-    # CLI exit code, which we deliberately keep at 0 for partial failures so
-    # vm_startup.sh writes DONE (not FAILED) and we don't lose the 9 clean
-    # decoders' work because turbojpeg crashed on a CMYK image.
-    summary_path = output_dir / get_system_identifier() / "run_summary.json"
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    summary_payload = {
-        "timestamp_utc": _dt.datetime.now(_dt.UTC).isoformat(),
-        "system": get_system_identifier(),
-        "mode": mode,
-        "num_images": num_images,
-        "num_runs": num_runs,
-        "dataloader_runs": dataloader_runs,
-        "workers": worker_counts,
-        "libs_requested": requested,
-        "libs_skipped_platform": skipped,
-        "libs_run": all_libs,
-        "failures": failures,
-        "exit_status": "ok" if not failures else "partial",
+@plan_app.command("instantiate")
+def plan_instantiate(
+    template_path: Path = typer.Argument(..., exists=True, dir_okay=False),
+    package_descriptor: Path = typer.Option(..., "--package-descriptor", exists=True, dir_okay=False),
+    output_dir: Path = typer.Option(..., "--output-dir", file_okay=False),
+    workload: list[str] = typer.Option([], "--workload"),
+) -> None:
+    """Fill and validate one plan per selected package workload."""
+    plans = instantiate_experiment_plans(
+        template_path=template_path,
+        package_descriptor=package_descriptor,
+        output_dir=output_dir,
+        workload_ids=tuple(workload),
+    )
+    _emit_json({"plans": [plan.to_dict() for plan in plans], "schema_version": "2.0"})
+
+
+@plan_app.command("validate")
+def plan_validate(
+    plan_path: Path = typer.Argument(..., exists=True, dir_okay=False),
+    package_descriptor: Path | None = typer.Option(None, "--package-descriptor", dir_okay=False),
+) -> None:
+    """Validate plan semantics and its exact pinned dataset identity."""
+    plan = load_experiment_plan(plan_path, dataset_descriptor=package_descriptor)
+    templates = expand_experiment_plan(plan)
+    _emit_json(
+        {
+            "configuration_count": len({template.configuration.config_id for template in templates}),
+            "plan_id": templates[0].plan_id,
+            "run_count_per_platform": len(templates),
+            "schema_version": "2.0",
+        },
+    )
+
+
+@plan_app.command("expand")
+def plan_expand(
+    plan_path: Path = typer.Argument(..., exists=True, dir_okay=False),
+    output: Path = typer.Option(..., "--output", dir_okay=False),
+    package_descriptor: Path | None = typer.Option(None, "--package-descriptor", dir_okay=False),
+) -> None:
+    """Write the deterministic randomized run-template matrix."""
+    plan = load_experiment_plan(plan_path, dataset_descriptor=package_descriptor)
+    templates = expand_experiment_plan(plan)
+    document = {
+        "plan_id": templates[0].plan_id,
+        "runs": [
+            {
+                "block_position": template.position,
+                "config_id": template.configuration.config_id,
+                "configuration": asdict(template.configuration),
+                "repetition": template.repetition,
+                "template_id": template.template_id,
+            }
+            for template in templates
+        ],
+        "schema_version": "2.0",
     }
-    with summary_path.open("w") as fh:
-        json.dump(summary_payload, fh, indent=2)
-    typer.echo(f"Run summary: {summary_path}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    _emit_json({"output": str(output.resolve()), "plan_id": templates[0].plan_id, "schema_version": "2.0"})
 
 
-@app.command("plot")
-def plot(
-    input_dir: Path = typer.Option(Path("output"), "--input", "-i", exists=True),
-    output_dir: Path = typer.Option(Path("docs/assets/benchmarks"), "--output", "-o"),
+@environment_app.command("provision")
+def environment_provision(
+    dependency_group: str = typer.Option(..., "--group"),
+    runner_revision: str = typer.Option(..., "--runner-revision"),
+    project_root: Path = typer.Option(Path(), "--project-root", file_okay=False),
+    cache_root: Path = typer.Option(..., "--cache-root", file_okay=False),
+    python_executable: Path = typer.Option(Path(sys.executable), "--python", dir_okay=False),
+    native_backend: list[str] = typer.Option([], "--native-backend", help="Repeat NAME=VERSION for native libraries."),
+    remote_store_uri: str | None = typer.Option(None, "--remote-store"),
+    remote_prefix: str = typer.Option("environments", "--remote-prefix"),
 ) -> None:
-    """Generate paper-quality plots from output/ JSONs. Wraps tools/create_plots.py."""
-    import importlib.util
+    """Provision or reuse an atomic `uv sync --frozen --no-editable` environment."""
+    request = EnvironmentRequest(
+        project_root=project_root,
+        cache_root=cache_root,
+        dependency_group=dependency_group,
+        runner_revision=runner_revision,
+        python_executable=python_executable,
+        native_backends=_parse_name_values(native_backend, option="--native-backend"),
+    )
+    store = GcloudObjectStore(remote_store_uri) if remote_store_uri is not None else None
+    result = materialize_environment_cache(request, store=store, prefix=remote_prefix) if store is not None else None
+    if result is None:
+        result = provision_environment(request)
+        if store is not None:
+            publish_environment_cache(result.root, store=store, prefix=remote_prefix)
+    _emit_json(
+        {
+            "cache_hit": result.cache_hit,
+            "descriptor": str(result.descriptor_path),
+            "environment_id": result.environment_id,
+            "environment_key": result.environment_key,
+            "python": str(result.python_executable),
+            "root": str(result.root),
+            "schema_version": "2.0",
+        },
+    )
 
-    if any(importlib.util.find_spec(pkg) is None for pkg in ("matplotlib", "seaborn")):
-        typer.echo(
-            "Plotting requires matplotlib + seaborn. Install with:\n    uv pip install -e '.[plot]'",
-            err=True,
-        )
+
+@platform_app.command("capture")
+def platform_capture(
+    output: Path = typer.Option(..., "--output", dir_okay=False),
+    cloud_provider: str = typer.Option("local", "--cloud-provider"),
+    machine_type: str = typer.Option(..., "--machine-type"),
+    location: str = typer.Option(..., "--location"),
+) -> None:
+    """Capture stable machine identity and separate dynamic runtime metadata."""
+    descriptor = capture_current_platform(
+        cloud_provider=cloud_provider,
+        machine_type=machine_type,
+        location=location,
+    )
+    path = write_platform_descriptor(output, descriptor)
+    _emit_json({"descriptor": str(path.resolve()), "platform_id": descriptor.platform_id, "schema_version": "2.0"})
+
+
+@campaign_app.command("run")
+def campaign_run(
+    plan_path: Path = typer.Argument(..., exists=True, dir_okay=False),
+    package_descriptor: Path = typer.Option(..., "--package-descriptor", exists=True, dir_okay=False),
+    environment_descriptor: Path = typer.Option(..., "--environment-descriptor", exists=True, dir_okay=False),
+    platform_descriptor: Path = typer.Option(..., "--platform-descriptor", exists=True, dir_okay=False),
+    artifact_root: Path = typer.Option(..., "--artifact-root", file_okay=False),
+    attempts_root: Path = typer.Option(..., "--attempts-root", file_okay=False),
+    runner_revision: str = typer.Option(..., "--runner-revision"),
+    remote_store_uri: str | None = typer.Option(None, "--remote-store"),
+    worker_python: Path = typer.Option(Path(sys.executable), "--worker-python", dir_okay=False),
+) -> None:
+    """Run support audits and missing run specs, checkpointing each bundle."""
+    remote = RemoteCheckpoint(GcloudObjectStore(remote_store_uri)) if remote_store_uri is not None else None
+    result = run_campaign(
+        CampaignConfig(
+            plan_path=plan_path,
+            package_descriptor=package_descriptor,
+            environment_descriptor=environment_descriptor,
+            platform_descriptor=platform_descriptor,
+            artifact_root=artifact_root,
+            attempts_root=attempts_root,
+            runner_revision=runner_revision,
+            worker_python=worker_python,
+            remote=remote,
+        ),
+    )
+    _emit_json(result.to_dict())
+    if not result.complete:
         raise typer.Exit(1)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    cmd = [sys.executable, "-m", "tools.create_plots", "--input", str(input_dir), "--output", str(output_dir)]
-    typer.echo("$ " + " ".join(cmd))
-    raise typer.Exit(subprocess.run(cmd, check=False).returncode)
 
-
-@app.command("render-readme")
-def render_readme(
-    input_dir: Path = typer.Option(Path("output"), "--input", "-i", exists=True),
-    readme: Path = typer.Option(Path("README.md"), "--readme", "-r", exists=True),
-    check: bool = typer.Option(False, "--check", help="Exit 1 if README would change."),
+@artifacts_app.command("validate")
+def artifacts_validate(
+    artifact_root: Path = typer.Argument(..., exists=True, file_okay=False),
 ) -> None:
-    """Regenerate the BENCH:* tables in README.md from output/ JSONs."""
-    cmd = [sys.executable, "-m", "tools.render_readme", "--input", str(input_dir), "--readme", str(readme)]
-    if check:
-        cmd.append("--check")
-    typer.echo("$ " + " ".join(cmd))
-    raise typer.Exit(subprocess.run(cmd, check=False).returncode)
+    """Validate every committed run bundle below ARTIFACT_ROOT/runs."""
+    run_root = artifact_root / "runs"
+    bundles = tuple(sorted(path for path in run_root.iterdir() if path.is_dir())) if run_root.is_dir() else ()
+    if not bundles:
+        raise typer.BadParameter("artifact root contains no run bundles")
+    for bundle in bundles:
+        validate_run_bundle(bundle, expected_run_key=bundle.name)
+    _emit_json({"bundle_count": len(bundles), "schema_version": "2.0", "status": "valid"})
+
+
+@artifacts_app.command("hydrate")
+def artifacts_hydrate(
+    source_artifact_root: Path = typer.Argument(..., exists=True, file_okay=False),
+    output_root: Path = typer.Option(..., "--output-root", file_okay=False),
+) -> None:
+    """Rebuild local run bundles from a downloaded remote artifact layout."""
+    bundles = hydrate_committed_runs(
+        source_artifact_root=source_artifact_root,
+        destination_artifact_root=output_root,
+    )
+    _emit_json(
+        {
+            "bundle_count": len(bundles),
+            "output_root": str(output_root.resolve()),
+            "schema_version": "2.0",
+        },
+    )
+
+
+@app.command("publish")
+def publication_publish(
+    spec_path: Path = typer.Argument(..., exists=True, dir_okay=False),
+    artifact_root: Path = typer.Option(..., "--artifact-root", exists=True, file_okay=False),
+    output_dir: Path = typer.Option(..., "--output-dir", file_okay=False),
+    check: bool = typer.Option(False, "--check"),
+) -> None:
+    """Generate or verify deterministic claim-scoped publication artifacts."""
+    publish(artifact_root=artifact_root, spec_path=spec_path, output_dir=output_dir, check=check)
+    _emit_json({"check": check, "output_dir": str(output_dir.resolve()), "schema_version": "2.0"})
+
+
+def _parse_workloads(values: list[str]) -> dict[str, Path]:
+    result: dict[str, Path] = {}
+    for value in values:
+        name, separator, raw_path = value.partition("=")
+        if not separator or not name or not raw_path:
+            raise typer.BadParameter("each --workload must be NAME=JPEG_DIRECTORY")
+        if name in result:
+            raise typer.BadParameter(f"duplicate workload name: {name}")
+        path = Path(raw_path).resolve()
+        if not path.is_dir():
+            raise typer.BadParameter(f"workload directory does not exist: {path}")
+        result[name] = path
+    return result
+
+
+def _parse_name_values(values: list[str], *, option: str) -> tuple[tuple[str, str], ...]:
+    result: dict[str, str] = {}
+    for value in values:
+        name, separator, raw_value = value.partition("=")
+        if not separator or not name or not raw_value:
+            raise typer.BadParameter(f"each {option} must be NAME=VALUE")
+        if name in result:
+            raise typer.BadParameter(f"duplicate {option} name: {name}")
+        result[name] = raw_value
+    return tuple(sorted(result.items()))
+
+
+def _emit_json(payload: object) -> None:
+    typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

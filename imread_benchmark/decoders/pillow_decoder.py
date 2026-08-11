@@ -14,9 +14,17 @@ class PillowDecoder(BaseDecoder):
     def decode(self, data: bytes) -> np.ndarray:
         from PIL import Image
 
-        return np.asarray(Image.open(BytesIO(data)).convert("RGB"))
+        with Image.open(BytesIO(data)) as image:
+            image.load()
+            rgb = image.convert("RGB")
+            rgb.load()
+            return np.array(rgb, dtype=np.uint8, copy=True)
 
     def decode_path(self, path: str) -> np.ndarray:
         from PIL import Image
 
-        return np.asarray(Image.open(path).convert("RGB"))
+        with Image.open(path) as image:
+            image.load()
+            rgb = image.convert("RGB")
+            rgb.load()
+            return np.array(rgb, dtype=np.uint8, copy=True)

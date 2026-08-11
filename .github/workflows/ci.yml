@@ -8,75 +8,61 @@ on:
 
 jobs:
   lint:
-    name: Lint
+    name: Static checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
-      - name: Install Python
-        run: uv python install 3.12
-
-      - name: Install dev dependencies
-        run: uv sync --group dev
-
-      - name: Run pre-commit
-        run: uv run pre-commit run --files $(find imread_benchmark tests -name "*.py" | tr '\n' ' ')
+      - run: uv python install 3.12
+      - run: uv sync --frozen --group dev
+      - run: uv run pre-commit run --all-files
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    env:
+      CPATH: /opt/libjpeg-turbo/include
+      LD_LIBRARY_PATH: /opt/libjpeg-turbo/lib64
+      LIBRARY_PATH: /opt/libjpeg-turbo/lib64
+      PKG_CONFIG_PATH: /opt/libjpeg-turbo/lib64/pkgconfig
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-      fail-fast: false
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
-      - name: Install Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-
-      # System libs the [mainstream] wheels dlopen at import time:
-      #   libjpeg-turbo8-dev — jpeg4py (built from sdist, needs headers).
-      #   libturbojpeg0-dev  — provides libturbojpeg.so.0 reliably across
-      #                        Ubuntu releases (noble renamed the runtime-only
-      #                        package to `libturbojpeg`; the `0-dev` name is
-      #                        the transitional metapackage that pulls the
-      #                        correct .so on both jammy and noble).
-      # libvips arrives via the `pyvips-binary` PyPI wheel, no apt install.
-      # Mirrors gcp/vm_startup.sh for cloud-CI parity.
-      - name: Install system C libraries
+      - run: uv python install ${{ matrix.python-version }}
+      - name: Install native JPEG libraries
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            libjpeg-turbo8-dev \
-            libturbojpeg0-dev
+          sudo ./scripts/install-libjpeg-turbo.sh
+      - name: Install locked mainstream environment
+        run: uv sync --frozen --group dev --extra mainstream --python ${{ matrix.python-version }}
+      - name: Run complete suite
+        run: uv run --python ${{ matrix.python-version }} pytest -q
 
-      # `--extra mainstream` brings in opencv, skimage, imageio, kornia-rs,
-      # simplejpeg, PyTurboJPEG, imagecodecs, pyvips, Pillow, torch,
-      # torchvision, jpeg4py. With this, the cross-decoder agreement test
-      # actually compares 11 libs instead of just pillow.
-      - name: Install dev + mainstream deps
-        run: uv sync --group dev --extra mainstream --python ${{ matrix.python-version }}
-
-      - name: Run tests
-        run: uv run --python ${{ matrix.python-version }} pytest tests/ -v
-
-  shellcheck:
-    name: Shellcheck
+  package:
+    name: Wheel and CLI smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+      - run: uv python install 3.12
+      - run: uv sync --frozen --group dev
+      - run: uv build
+      - run: uv run imread-benchmark --help
+      - run: uv run imread-benchmark list-decoders
 
-      - name: Install shellcheck
-        run: sudo apt-get install -y shellcheck
-
-      - name: Check GCP scripts
-        run: shellcheck --severity=warning gcp/*.sh
+  shellcheck:
+    name: GCP bootstrap shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      - run: shellcheck --severity=warning gcp/*.sh
+      - run: bash -n gcp/run.sh gcp/run-many.sh gcp/vm_startup.sh

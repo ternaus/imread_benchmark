@@ -3,58 +3,16 @@
 ## Development setup
 
 ```bash
-pip install uv
-uv sync --group dev
-```
-
-## Local-only material (`_internal/`)
-
-The `_internal/` directory is **gitignored**. Keep drafts, papers, regenerated plots, PDFs, and scratch assets there — for example:
-
-- `_internal/papers/paper.md` — arXiv / manuscript drafts (do not add `paper.md` at repo root)
-- `_internal/papers/generate_paper_assets.py` — thin wrapper; calls `python -m tools.paper_assets --all` to write `generated/*.md` + `figures/*` from `output/*.json`
-- `_internal/plots/` — scratch figures from `tools/create_plots.py` (README plots live in `docs/assets/benchmarks/`)
-
-Benchmark result plots and paper claims must follow
-[`docs/plotting_and_statistics.md`](docs/plotting_and_statistics.md): use
-claim-first figures, keep exact matrices in tables, and avoid strict
-faster/slower language unless raw-run uncertainty supports it.
-- `_internal/assets/` — sample images, posters, one-off binaries
-- `_internal/notebooks/` — local Jupyter notebooks (the repo ignores `*.ipynb`; do not commit them)
-
-Nothing under `_internal/` is tracked by git.
-
-## Preparing an anonymous review mirror
-
-The public repository intentionally keeps public identity links. If you need a
-double-blind review artifact, create a separate branch or mirror and remove
-identity surfaces there, not in regular public cleanup PRs.
-
-Checklist for that later anonymous branch:
-
-- remove the GitAds block from `README.md`
-- remove or replace `.github/FUNDING.yml`
-- replace the public citation block in `README.md` with an anonymous artifact note
-- remove direct links to public GitHub profiles, public repository URLs, and author names
-- replace personal or project-specific GCS examples with neutral placeholders if needed
-- verify with `rg -i 'ternaus|iglovikov|vladimir|gitads|github sponsors|2501.13131'`
-- keep `_internal/` ignored; do not publish manuscript drafts by accident
-
-## Running tests
-
-```bash
-uv run pytest tests/ -v
-```
-
-## Running linters
-
-```bash
+uv sync --frozen --group dev --extra mainstream
+uv run pytest -q
 uv run pre-commit run --all-files
 ```
 
-## Adding a new JPEG decoder
+Do not add an alternate runner, result JSON format, or plotting reader. The
+schema-2 package, campaign, bundle, canonical loader, and publication path are
+the only supported workflow.
 
-### 1. Create the decoder
+## Adding a decoder
 
 Create `imread_benchmark/decoders/<name>_decoder.py`:
 
@@ -62,111 +20,93 @@ Create `imread_benchmark/decoders/<name>_decoder.py`:
 from __future__ import annotations
 
 import numpy as np
+
 from imread_benchmark.decoders import BaseDecoder
 
 
 class FooDecoder(BaseDecoder):
     name = "foo"
-    package_name = "foo-package"  # pip distribution name
+    package_name = "foo-package"
+    group = "mainstream"
 
     def decode(self, data: bytes) -> np.ndarray:
         import foo
-        # Must return (H, W, 3) uint8 RGB array
-        return foo.decode_jpeg(data)
 
-    # Optional: override if the library has a fast path-based API
-    # def decode_path(self, path: str) -> np.ndarray:
-    #     import foo
-    #     return foo.read_jpeg(path)
+        result = foo.decode(data)
+        return np.ascontiguousarray(result, dtype=np.uint8)
 ```
 
-The default `decode_path()` implementation calls `decode(Path(path).read_bytes())`, which is correct for all libraries.
+The adapter contract is a fully materialized, C-contiguous `(H, W, 3)` RGB
+`uint8` array. The output must remain valid after the input buffer and every
+library-local object are released. Lazy image handles, BGR output, CHW tensors,
+borrowed buffers, and deferred conversion are invalid.
 
-### 2. Register the decoder entry point
+Pillow is the reference lifetime pattern: open in a context manager, call
+`load()`, convert to RGB, materialize again, and copy to an owned NumPy array.
 
-In [`pyproject.toml`](pyproject.toml), add an entry under
-`[project.entry-points."imread_benchmark.decoders"]`:
+Register the class under
+`[project.entry-points."imread_benchmark.decoders"]` and add its distribution
+to the appropriate optional dependency group:
 
-```toml
-entry-points."imread_benchmark.decoders".foo = "imread_benchmark.decoders.foo_decoder:FooDecoder"
-```
+- `mainstream` for packages compatible with the PyTorch-oriented environment;
+- `tensorflow` only for the separately resolved TensorFlow stack.
 
-The runtime `REGISTRY` is built from these entry points. Do not hand-edit
-`imread_benchmark/decoders/__init__.py` unless you are changing the registry
-mechanism itself.
-
-### 3. Add to a dependency group
-
-In [`pyproject.toml`](pyproject.toml), add the pip distribution name to one of the `[project.optional-dependencies]` groups:
-
-- `mainstream` — coexists with everything else (opencv, skimage, kornia-rs, torch, etc.). Use this unless you have a real conflict.
-- `tensorflow` — only if your library hard-conflicts with torch.
-
-(There used to be a third `pillow-simd` group; dropped 2026-04 — see [`docs/gcp_benchmarks.md`](docs/gcp_benchmarks.md#why-no-pillow-simd) for the reasoning. If you're adding a new Pillow fork that masks vanilla `PIL` in the same venv, add a fresh group rather than reusing this slot.)
-
-```toml
-mainstream = [
-  "opencv-python-headless",
-  ...
-  "foo-package",                              # platform-agnostic
-  "foo-package; sys_platform == 'linux'",     # Linux only
-]
-```
-
-Add a platform marker if the wheel does not build everywhere.
-
-### 4. Encode platform skips on the class
-
-Nothing else needs editing — `REGISTRY` auto-discovers your decoder and the CLI runs it on every machine that supports it. If your library doesn't run everywhere, set the relevant ClassVars on your decoder:
+Use the decoder class capability fields for genuine platform limitations:
 
 ```python
 class FooDecoder(BaseDecoder):
-    name = "foo"
-    package_name = "foo-package"
-    group = "mainstream"                       # which optional-dependencies group provides it
-    skip_single = [("Darwin", "*")]            # don't run single-thread benchmark on macOS
-    skip_dataloader = [("Linux", "aarch64")]   # don't run inside torch DataLoader on Arm Linux
-    in_dataloader = True                       # set False if it never makes sense in a DataLoader
+    skip_single = (("Darwin", "*"),)
+    skip_dataloader = (("Linux", "aarch64"),)
+    in_dataloader = True
 ```
 
-### 5. Document system deps
+Do not silently skip a failure discovered during a campaign. The plan preflight
+must either reject an unsupported configuration or the support audit must record
+the item-level failure before timing.
 
-If a system library is required (e.g. `brew install something`), add it to the **System Requirements** section in [`README.md`](README.md).
+## Required tests for a decoder
 
-### 6. Verify
+1. bytes and path decode return normalized, owned/materialized output;
+2. red-channel order test catches BGR output;
+3. pixel agreement with the Pillow reference within the documented tolerance;
+4. fixed/default thread-control behavior where applicable;
+5. real DataLoader worker smoke if `in_dataloader` is true;
+6. platform capability metadata and dependency-group discovery.
 
-```bash
-# Tests auto-discover the decoder once its entry point is installed
-uv run pytest tests/ -v
+Run the full suite with the dependency group installed. A unit test that mocks
+the decoder import is not a replacement for the real subprocess/worker smoke.
 
-# Quick smoke run via the orchestrator
-imread-benchmark run --libs foo --mode single \
-    --data-dir /path/to/imagenet/val \
-    --num-images 100 --num-runs 2
-```
+## Architecture invariants
 
-## Project structure
+- One timed configuration runs in one fresh subprocess.
+- Data transport, verification, validation, and warmup remain outside timing.
+- DataLoader process start method is explicit and part of `config_id`.
+- Support sets are immutable and pinned by ordered item IDs.
+- Completed bundles are write-once and `COMMITTED.json` is written last.
+- Environment provisioning uses `uv sync --frozen --no-editable`.
+- GCP scripts are lifecycle/bootstrap only; experiment semantics belong in
+  typed Python modules.
+- Publication code reads only the canonical bundle loader.
 
-```
-imread_benchmark/
-├── decoders/
-│   ├── __init__.py          # BaseDecoder, entry-point REGISTRY
-│   ├── opencv_decoder.py
-│   └── ...                  # one file per library
-├── benchmark.py             # timing loop with warmup
-├── benchmark_single.py      # CLI: single-library benchmark
-├── benchmark_dataloader.py  # CLI: DataLoader throughput benchmark
-└── utils.py                 # system info, path helpers
-tests/
-├── conftest.py              # in-memory JPEG fixture
-├── test_decoders.py         # parametrized decode smoke tests
-├── test_benchmark.py        # timing loop tests
-└── test_utils.py            # utility function tests
-tools/
-├── analyze_images.py        # dataset statistics
-├── create_plots.py          # generate public README performance charts
-├── paper_assets.py          # generate local paper tables/figures under _internal/
-└── render_readme.py         # refresh benchmark tables in README.md
-pyproject.toml               # 2 dependency groups under [project.optional-dependencies]:
-                             #   mainstream / tensorflow
-```
+Any change to an identity field needs mutation tests showing that the relevant
+ID changes. Any change to remote storage needs corruption, conflict, incomplete
+commit, and resume tests.
+
+## Documentation and claims
+
+Reader-facing benchmark claims must state protocol, workload, platform, output
+contract, support policy, repetition count, and uncertainty. Decoder or loader
+measurements cannot be described as training speed.
+
+JPEG quality reconstructed from quantization tables is an estimate. Natural
+FODB processing variants confound resize, encoder, quantization, subsampling,
+and metadata changes; causal quality/resolution claims require the controlled
+ablation built by `dataset controlled-package` and documented in
+[docs/controlled_ablation.md](docs/controlled_ablation.md).
+
+## Local-only material
+
+`_internal/` is ignored and may hold manuscript drafts or scratch outputs. It
+must not become a second implementation, result format, or publication source.
+Reusable plans, tests, schemas, and documentation belong in tracked package or
+`docs/` files.
