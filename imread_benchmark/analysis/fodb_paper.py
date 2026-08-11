@@ -53,7 +53,6 @@ EXPECTED_REPETITIONS = tuple(range(5))
 BASE_WORKERS = (0, 2, 4, 8)
 WORKER12_DECISION_GRID = (*BASE_WORKERS, 12)
 WORKER_GRID = (*WORKER12_DECISION_GRID, 16)
-DEPLOYMENT_WORKERS = (4, 8, 12, 16)
 EXPECTED_ITEM_COUNTS = {"fodb-native": 324, "fodb-mixed": 1944}
 EXPECTED_TIMED_ITEM_COUNTS = {"fodb-native": 324, "fodb-mixed": 1668}
 CONTROLLED_THREADS = {"opencv": 1, "pyvips": 1, "torchvision": 1}
@@ -128,12 +127,11 @@ FOLLOWUP_PLAN_SCOPES = WORKER12_PLAN_SCOPES | WORKER16_PLAN_SCOPES
 FOLLOWUP_PLAN_WORKERS = dict.fromkeys(WORKER12_PLAN_SCOPES, 12) | dict.fromkeys(WORKER16_PLAN_SCOPES, 16)
 WORKER16_MINIMUM_GAIN = 0.05
 PRIMARY_DECODERS = ("pillow", "opencv", "simplejpeg", "torchvision")
-MIGRATION_DECODERS = ("pillow", "opencv", "simplejpeg")
 PRACTICAL_MARGIN = 0.10
-ROBUSTNESS_AUDIT_PACKAGE_ID = "b797eb3938cad77e115b2315b41457c5d6b3062968f7529ee35d1b38dd87eb2f"
-ROBUSTNESS_AUDIT_MANIFEST_ID = "47f437595cf8a3215deb958f7278d63bcc6b2a00d4d595d821351431ceda803f"
-ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT = 276
-ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES = {
+COMPATIBILITY_AUDIT_PACKAGE_ID = "b797eb3938cad77e115b2315b41457c5d6b3062968f7529ee35d1b38dd87eb2f"
+COMPATIBILITY_AUDIT_MANIFEST_ID = "47f437595cf8a3215deb958f7278d63bcc6b2a00d4d595d821351431ceda803f"
+COMPATIBILITY_AUDIT_EMPTY_DHT_ITEM_COUNT = 276
+COMPATIBILITY_AUDIT_EMPTY_DHT_SUCCESSES = {
     "ajpegli": 0,
     "imagecodecs": 276,
     "imageio": 276,
@@ -147,8 +145,8 @@ ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES = {
     "torchvision": 276,
     "turbojpeg": 276,
 }
-ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT = 1
-ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES = {
+COMPATIBILITY_AUDIT_FOUR_COMPONENT_ITEM_COUNT = 1
+COMPATIBILITY_AUDIT_FOUR_COMPONENT_SUCCESSES = {
     "ajpegli": 0,
     "imagecodecs": 0,
     "imageio": 0,
@@ -162,10 +160,12 @@ ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES = {
     "torchvision": 0,
     "turbojpeg": 0,
 }
-ROBUSTNESS_AUDIT_ITEM_COUNT = ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT + ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT
-ROBUSTNESS_AUDIT_SUCCESSES = {
-    decoder: successes + ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES[decoder]
-    for decoder, successes in ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES.items()
+COMPATIBILITY_AUDIT_ITEM_COUNT = (
+    COMPATIBILITY_AUDIT_EMPTY_DHT_ITEM_COUNT + COMPATIBILITY_AUDIT_FOUR_COMPONENT_ITEM_COUNT
+)
+COMPATIBILITY_AUDIT_SUCCESSES = {
+    decoder: successes + COMPATIBILITY_AUDIT_FOUR_COMPONENT_SUCCESSES[decoder]
+    for decoder, successes in COMPATIBILITY_AUDIT_EMPTY_DHT_SUCCESSES.items()
 }
 
 
@@ -220,15 +220,13 @@ def build_paper_assets(*, artifact_root: Path, package_path: Path, output_root: 
     support_item_ids = _support_item_ids(records)
     workload_descriptors = _workload_descriptors(package, manifests, support_item_ids)
     decisions = _decision_rows(aggregates)
-    recommendations = _recommendation_rows(aggregates)
-    pillow_rows = _pillow_rows(aggregates)
     thread_rows = _thread_rows(aggregates)
     worker_transfer_rows = _worker_transfer_rows(aggregates)
     worker16_candidates = _worker16_candidate_rows(aggregates)
+    compatibility_audit = _compatibility_audit()
     sections = {
+        "compatibility_audit": compatibility_audit,
         "decisions": decisions,
-        "pillow_migration": pillow_rows,
-        "recommendations": recommendations,
         "thread_controls": thread_rows,
         "worker_transfer": worker_transfer_rows,
         "worker16_candidates": worker16_candidates,
@@ -247,18 +245,9 @@ def build_paper_assets(*, artifact_root: Path, package_path: Path, output_root: 
     _write_text(generated_dir / "table_fodb_provenance.tex", _provenance_table(workload_descriptors))
     _write_text(generated_dir / "table_fodb_decisions.tex", _decision_table(decisions))
     _write_text(
-        generated_dir / "table_fodb_recommendations.tex",
-        _recommendation_table(recommendations),
-    )
-    _write_text(
-        generated_dir / "table_fodb_cell_recommendations.tex",
-        _cell_recommendation_table(recommendations),
-    )
-    _write_text(
         generated_dir / "table_fodb_decoder_coverage.tex",
-        _decoder_coverage_table(recommendations),
+        _decoder_coverage_table(compatibility_audit),
     )
-    _write_text(generated_dir / "table_fodb_pillow.tex", _pillow_table(pillow_rows))
     _write_text(
         generated_dir / "table_fodb_worker_transfer.tex",
         _worker_transfer_table(worker_transfer_rows),
@@ -268,7 +257,6 @@ def build_paper_assets(*, artifact_root: Path, package_path: Path, output_root: 
     _plot_workloads(package, manifests, support_item_ids, figures_dir / "fig_fodb_workload_distributions.pdf")
     _plot_worker_scaling(aggregates, figures_dir / "fig_fodb_worker_scaling.pdf")
     _plot_protocol_regret(decisions, figures_dir / "fig_fodb_protocol_regret.pdf")
-    _plot_recommendations(recommendations, figures_dir / "fig_fodb_recommendations.pdf")
     return evidence
 
 
@@ -504,99 +492,9 @@ def _decision_rows(aggregates: tuple[Aggregate, ...]) -> list[dict[str, Any]]:
     return rows
 
 
-def _recommendation_rows(
-    aggregates: tuple[Aggregate, ...],
-    robustness_audit_successes: dict[str, int] | None = None,
-) -> dict[str, Any]:
-    if robustness_audit_successes is None:
-        audit_successes = ROBUSTNESS_AUDIT_SUCCESSES
-        uses_recorded_audit = True
-    else:
-        audit_successes = robustness_audit_successes
-        uses_recorded_audit = False
-    cells: list[dict[str, Any]] = []
-    gaps_by_decoder: dict[str, list[float]] = defaultdict(list)
-    for machine_type in EXPECTED_MACHINES:
-        for workload in EXPECTED_ITEM_COUNTS:
-            candidates = tuple(
-                row
-                for row in aggregates
-                if row.workload == workload
-                and row.machine_type == machine_type
-                and row.protocol == "loader-supply"
-                and row.workers in DEPLOYMENT_WORKERS
-                and _is_controlled(row)
-            )
-            peak_by_decoder = {
-                decoder: _best(tuple(row for row in candidates if row.decoder == decoder))
-                for decoder in _decoders(candidates)
-            }
-            if len(peak_by_decoder) != 12:
-                raise PaperAssetError(f"recommendation block is incomplete for {workload}/{machine_type}")
-            if set(peak_by_decoder) != set(audit_successes):
-                raise PaperAssetError("recommendation decoders do not match the robustness audit")
-            leader = _best(tuple(peak_by_decoder.values()))
-            decoder_rows = []
-            for decoder, peak in sorted(peak_by_decoder.items()):
-                gap_percent = (1 - peak.mean / leader.mean) * 100
-                gaps_by_decoder[decoder].append(gap_percent)
-                audited_successes = audit_successes[decoder]
-                passes_robustness_audit = audited_successes == ROBUSTNESS_AUDIT_ITEM_COUNT
-                decoder_rows.append(
-                    {
-                        "audited_successes": audited_successes,
-                        "coverage_qualified": passes_robustness_audit,
-                        "decoder": decoder,
-                        "gap_from_leader_percent": gap_percent,
-                        "mean_images_per_second": peak.mean,
-                        "recommended": passes_robustness_audit and gap_percent <= PRACTICAL_MARGIN * 100,
-                        "within_speed_margin": gap_percent <= PRACTICAL_MARGIN * 100,
-                        "workers": peak.workers,
-                    },
-                )
-            recommended = [
-                row["decoder"]
-                for row in sorted(decoder_rows, key=lambda row: (row["gap_from_leader_percent"], row["decoder"]))
-                if row["recommended"]
-            ]
-            speed_shortlist = [
-                row["decoder"]
-                for row in sorted(decoder_rows, key=lambda row: (row["gap_from_leader_percent"], row["decoder"]))
-                if row["within_speed_margin"]
-            ]
-            cells.append(
-                {
-                    "decoders": decoder_rows,
-                    "leader": leader.decoder,
-                    "leader_images_per_second": leader.mean,
-                    "leader_workers": leader.workers,
-                    "machine_type": machine_type,
-                    "platform": PLATFORM_LABELS[machine_type],
-                    "recommended": recommended,
-                    "speed_shortlist": speed_shortlist,
-                    "workload": workload,
-                },
-            )
-
-    worst_gap_percent = {decoder: max(gaps) for decoder, gaps in gaps_by_decoder.items()}
-    robust_decoders = sorted(
-        decoder for decoder, successes in audit_successes.items() if successes == ROBUSTNESS_AUDIT_ITEM_COUNT
-    )
-    if not robust_decoders:
-        raise PaperAssetError("no decoder passes the robustness audit")
-    portable_decoder = min(
-        robust_decoders,
-        key=lambda decoder: (worst_gap_percent[decoder], decoder),
-    )
-    universal_recommendations = sorted(
-        decoder for decoder in robust_decoders if worst_gap_percent[decoder] <= PRACTICAL_MARGIN * 100
-    )
-    portable_speed_candidates = sorted(
-        (decoder for decoder, gap in worst_gap_percent.items() if gap <= PRACTICAL_MARGIN * 100),
-        key=lambda decoder: (worst_gap_percent[decoder], decoder),
-    )
-    robustness_audit = {
-        "item_count": ROBUSTNESS_AUDIT_ITEM_COUNT,
+def _compatibility_audit() -> dict[str, Any]:
+    return {
+        "item_count": COMPATIBILITY_AUDIT_ITEM_COUNT,
         "linux_receipts": [
             {
                 "job": "imread-20260802-180331-9cbbc8f2",
@@ -612,9 +510,9 @@ def _recommendation_rows(
                 "result": "completed",
             },
         ],
-        "manifest_id": ROBUSTNESS_AUDIT_MANIFEST_ID,
+        "manifest_id": COMPATIBILITY_AUDIT_MANIFEST_ID,
         "output_contract": "normalized-rgb",
-        "package_id": ROBUSTNESS_AUDIT_PACKAGE_ID,
+        "package_id": COMPATIBILITY_AUDIT_PACKAGE_ID,
         "platform": {
             "machine_type": "c3-standard-4",
             "operating_system": "Ubuntu 24.04",
@@ -623,72 +521,27 @@ def _recommendation_rows(
         "process_context": "main-process support audit",
         "runner_revision": "9cbbc8f212ad9a384fbabf1dde582023077e83dcda0ac285baf0c16351febb8f",
         "selection": "276 FODB empty-DHT exclusions plus one four-component RGB-contract sentinel",
-        "successes": dict(sorted(audit_successes.items())),
-    }
-    if uses_recorded_audit:
-        robustness_audit["categories"] = {
+        "successes": dict(sorted(COMPATIBILITY_AUDIT_SUCCESSES.items())),
+        "categories": {
             "empty_dht_bitstream": {
                 "description": (
                     "Progressive FODB WhatsApp JPEGs containing empty DHT markers; success measures decoder "
                     "recovery from this malformed bitstream pattern."
                 ),
-                "item_count": ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT,
-                "successes": dict(sorted(ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES.items())),
+                "item_count": COMPATIBILITY_AUDIT_EMPTY_DHT_ITEM_COUNT,
+                "successes": dict(sorted(COMPATIBILITY_AUDIT_EMPTY_DHT_SUCCESSES.items())),
             },
             "four_component_rgb": {
                 "description": (
                     "A four-component JPEG; success requires conversion to the normalized three-channel RGB contract."
                 ),
                 "filename": "ILSVRC2012_val_00019877.JPEG",
-                "item_count": ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT,
+                "item_count": COMPATIBILITY_AUDIT_FOUR_COMPONENT_ITEM_COUNT,
                 "sha256": "75413aece0dc58bcd9d4b89f664ab04cee3ade28317d81aeace455029e0000ba",
-                "successes": dict(sorted(ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES.items())),
+                "successes": dict(sorted(COMPATIBILITY_AUDIT_FOUR_COMPONENT_SUCCESSES.items())),
             },
-        }
-    return {
-        "cells": cells,
-        "coverage_qualified_decoders": robust_decoders,
-        "robustness_audit": robustness_audit,
-        "portable_decoder": portable_decoder,
-        "portable_max_gap_percent": worst_gap_percent[portable_decoder],
-        "portable_speed_candidates": portable_speed_candidates,
-        "universal_recommendations": universal_recommendations,
-        "worst_gap_percent": dict(sorted(worst_gap_percent.items())),
+        },
     }
-
-
-def _pillow_rows(aggregates: tuple[Aggregate, ...]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for workload in EXPECTED_ITEM_COUNTS:
-        for machine_type in EXPECTED_MACHINES:
-            peaks: dict[str, Aggregate] = {}
-            for decoder in MIGRATION_DECODERS:
-                candidates = tuple(
-                    row
-                    for row in aggregates
-                    if row.workload == workload
-                    and row.machine_type == machine_type
-                    and row.protocol == "loader-supply"
-                    and row.decoder == decoder
-                    and row.workers in DEPLOYMENT_WORKERS
-                    and _is_controlled(row)
-                )
-                peaks[decoder] = _best(candidates)
-            pillow = peaks["pillow"]
-            rows.append(
-                {
-                    "gains_percent": {
-                        decoder: (peaks[decoder].mean / pillow.mean - 1) * 100
-                        for decoder in MIGRATION_DECODERS
-                        if decoder != "pillow"
-                    },
-                    "machine_type": machine_type,
-                    "peak_workers": {decoder: peak.workers for decoder, peak in peaks.items()},
-                    "platform": PLATFORM_LABELS[machine_type],
-                    "workload": workload,
-                },
-            )
-    return rows
 
 
 def _thread_rows(aggregates: tuple[Aggregate, ...]) -> list[dict[str, Any]]:
@@ -879,7 +732,6 @@ def _evidence_document(
                 for workload in EXPECTED_ITEM_COUNTS
             },
             "practical_margin_percent": PRACTICAL_MARGIN * 100,
-            "deployment_worker_grid": list(DEPLOYMENT_WORKERS),
             "runner_revision": RUNNER_REVISION,
             "broad_worker_grid": list(BASE_WORKERS),
             "worker_grid": list(WORKER_GRID),
@@ -893,15 +745,14 @@ def _evidence_document(
                 if decoders
             },
         },
-        "pillow_migration": sections["pillow_migration"],
-        "recommendations": sections["recommendations"],
+        "compatibility_audit": sections["compatibility_audit"],
         "provenance": {
             "bundle_ids_sha256": _sequence_digest(bundle_ids),
             "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "run_keys": run_keys,
             "run_keys_sha256": _sequence_digest(run_keys),
         },
-        "schema_version": "1.6",
+        "schema_version": "1.7",
         "thread_controls": sections["thread_controls"],
         "worker_transfer": sections["worker_transfer"],
         "worker16_candidates": sections["worker16_candidates"],
@@ -1082,17 +933,13 @@ def _only(rows: tuple[Aggregate, ...], key: AggregateKey) -> Aggregate:
 
 
 def _summary_markdown(evidence: dict[str, Any]) -> str:
-    robustness_audit = evidence["recommendations"]["robustness_audit"]
-    empty_dht = robustness_audit["categories"]["empty_dht_bitstream"]
-    four_component = robustness_audit["categories"]["four_component_rgb"]
-    universal_recommendations = evidence["recommendations"]["universal_recommendations"]
+    compatibility_audit = evidence["compatibility_audit"]
+    empty_dht = compatibility_audit["categories"]["empty_dht_bitstream"]
+    four_component = compatibility_audit["categories"]["four_component_rgb"]
     lines = [
         "# Generated FODB evidence",
         "",
         "All values below are generated from the exact evidence plan IDs in `fodb_evidence.json`.",
-        "Recommendation analysis first keeps decoders within 10% of the local loader leader, "
-        "then applies separate empty-DHT bitstream and four-component RGB robustness tests.",
-        "The 10% margin is a reporting policy, not a hypothesis test.",
         "",
         "## Workloads",
         "",
@@ -1111,37 +958,7 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "## Deployment recommendation",
-            "",
-            (
-                f"Universal recommendation: {', '.join(f'`{decoder}`' for decoder in universal_recommendations)}."
-                if universal_recommendations
-                else (
-                    "No decoder both passes the robustness audit and remains within 10% "
-                    "of the leader in all eight cells."
-                )
-            ),
-            f" Robust minimax candidate (not a universal 10% recommendation): "
-            f"`{evidence['recommendations']['portable_decoder']}`; maximum aggregate gap from the local loader "
-            f"leader: {evidence['recommendations']['portable_max_gap_percent']:.2f}%.",
-            f" Portable speed shortlist before the robustness gate: "
-            f"{', '.join(f'`{decoder}`' for decoder in evidence['recommendations']['portable_speed_candidates'])}.",
-            "",
-            "| Platform | Workload | Within 10% | Passes robustness gate | Highest observed mean |",
-            "| --- | --- | --- | --- | --- |",
-        ],
-    )
-    lines.extend(
-        (
-            f"| {row['platform']} | {row['workload']} | {', '.join(row['speed_shortlist'])} | "
-            f"{', '.join(row['recommended'])} | {row['leader']} |"
-        )
-        for row in evidence["recommendations"]["cells"]
-    )
-    lines.extend(
-        [
-            "",
-            "## Robustness audit",
+            "## Compatibility audit",
             "",
             "The empty-DHT test measures recovery from one malformed bitstream pattern. "
             "The four-component test measures conversion to the normalized three-channel RGB contract; "
@@ -1155,9 +972,9 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
         (
             f"| `{decoder}` | {empty_dht['successes'][decoder]}/{empty_dht['item_count']} | "
             f"{four_component['successes'][decoder]}/{four_component['item_count']} | "
-            f"{robustness_audit['successes'][decoder]}/{robustness_audit['item_count']} |"
+            f"{compatibility_audit['successes'][decoder]}/{compatibility_audit['item_count']} |"
         )
-        for decoder in sorted(robustness_audit["successes"])
+        for decoder in sorted(compatibility_audit["successes"])
     )
     lines.extend(
         [
@@ -1165,7 +982,7 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
             "## Protocol decision",
             "",
             "| Workload | Platform | Decode leader | Loader leader | Workers | Regret | "
-            "Spearman rho | 10% speed tier before robustness gate |",
+            "Spearman rho | Top 10% throughput group |",
             "| --- | --- | --- | --- | ---: | ---: | ---: | --- |",
         ],
     )
@@ -1175,20 +992,6 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
             f"| {row['workload']} | {row['platform']} | {row['decode_leader']} | {row['loader_leader']} | "
             f"{row['loader_leader_workers']} | {row['aggregate_regret_percent']:.2f}% | "
             f"{row['rank_correlation']:.2f} | {tier} |",
-        )
-    lines.extend(
-        [
-            "",
-            "## Pillow migration",
-            "",
-            "| Workload | Platform | OpenCV | simplejpeg |",
-            "| --- | --- | ---: | ---: |",
-        ],
-    )
-    for row in evidence["pillow_migration"]:
-        gains = row["gains_percent"]
-        lines.append(
-            f"| {row['workload']} | {row['platform']} | {gains['opencv']:+.1f}% | {gains['simplejpeg']:+.1f}% |",
         )
     lines.extend(
         [
@@ -1224,70 +1027,17 @@ def _decision_table(rows: list[dict[str, Any]]) -> str:
     for row in rows:
         line = (
             f"{_latex_workload(row['workload'])} & {row['platform']} & \\texttt{{{row['decode_leader']}}} & "
-            f"\\texttt{{{row['loader_leader']}}} ($w={row['loader_leader_workers']}$) & "
+            f"\\texttt{{{row['loader_leader']}}} ({row['loader_leader_workers']} workers) & "
             f"{row['aggregate_regret_percent']:.1f}\\% & {row['rank_correlation']:.2f} "
         )
         body.append(line)
     return (r"\\" + "\n").join(body) + "\n"
 
 
-def _recommendation_table(recommendations: dict[str, Any]) -> str:
-    portable_decoder = recommendations["portable_decoder"]
-    universal = set(recommendations["universal_recommendations"])
-    portable_speed = set(recommendations["portable_speed_candidates"])
-    successes = recommendations["robustness_audit"]["successes"]
-    worst_gaps = recommendations["worst_gap_percent"]
-
-    def sort_key(decoder: str) -> tuple[int, float, str]:
-        if decoder == portable_decoder:
-            group = 0
-        elif decoder in portable_speed:
-            group = 1
-        else:
-            group = 2
-        return group, worst_gaps[decoder], decoder
-
-    body = []
-    shown = portable_speed | {decoder for decoder, count in successes.items() if count == ROBUSTNESS_AUDIT_ITEM_COUNT}
-    for decoder in sorted(shown, key=sort_key):
-        audited_successes = successes[decoder]
-        audit = f"{audited_successes}/{ROBUSTNESS_AUDIT_ITEM_COUNT}"
-        if decoder == portable_decoder:
-            decision = "robust minimax"
-        elif decoder in universal:
-            decision = r"universal 10\% tier"
-        elif decoder in portable_speed:
-            decision = "audit target corpus"
-        else:
-            decision = "cell-specific"
-        body.append(
-            f"\\texttt{{{decoder}}} & {worst_gaps[decoder]:.1f}\\% & {audit} & {decision} ",
-        )
-    return (r"\\" + "\n").join(body) + "\n"
-
-
-def _cell_recommendation_table(recommendations: dict[str, Any]) -> str:
-    body = []
-    for cell in recommendations["cells"]:
-        accepted = [row for row in cell["decoders"] if row["recommended"]]
-        if not accepted:
-            raise PaperAssetError(
-                f"no audited 10% recommendation for {cell['workload']}/{cell['machine_type']}",
-            )
-        choices = ", ".join(
-            f"\\texttt{{{row['decoder']}}} ($w={row['workers']}$; {row['gap_from_leader_percent']:.1f}\\%)"
-            for row in sorted(accepted, key=lambda row: (row["gap_from_leader_percent"], row["decoder"]))
-        )
-        leader = f"\\texttt{{{cell['leader']}}} ($w={cell['leader_workers']}$)"
-        body.append(f"{cell['platform']} & {_latex_workload(cell['workload'])} & {choices} & {leader} ")
-    return (r"\\" + "\n").join(body) + "\n"
-
-
-def _decoder_coverage_table(recommendations: dict[str, Any]) -> str:
-    audit = recommendations["robustness_audit"]
+def _decoder_coverage_table(audit: dict[str, Any]) -> str:
     categories = audit.get("categories")
     if not isinstance(categories, dict):
-        raise PaperAssetError("decoder coverage table requires the recorded two-category robustness audit")
+        raise PaperAssetError("decoder coverage table requires the recorded two-category compatibility audit")
     empty_dht = categories["empty_dht_bitstream"]
     four_component = categories["four_component_rgb"]
     empty_dht_successes = empty_dht["successes"]
@@ -1317,28 +1067,15 @@ def _provenance_table(rows: list[dict[str, Any]]) -> str:
     return (r"\\" + "\n").join(body) + "\n"
 
 
-def _pillow_table(rows: list[dict[str, Any]]) -> str:
-    body = []
-    for row in rows:
-        gains = row["gains_percent"]
-        line = (
-            f"{_latex_workload(row['workload'])} & {row['platform']} & {gains['opencv']:+.1f}\\% & "
-            f"{gains['simplejpeg']:+.1f}\\% "
-        )
-        body.append(line)
-    return (r"\\" + "\n").join(body) + "\n"
-
-
 def _worker_transfer_table(rows: list[dict[str, Any]]) -> str:
     body = []
     for row in rows:
         native = row["native_peak_worker_counts"]
         mixed = row["mixed_peak_worker_counts"]
-        native_counts = ", ".join(f"$w={workers}$: {count}" for workers, count in sorted(native.items()))
-        mixed_counts = ", ".join(f"$w={workers}$: {count}" for workers, count in sorted(mixed.items()))
-        changed = ", ".join(f"\\texttt{{{decoder}}}" for decoder in row["changed_decoders"]) or "none"
+        native_counts = ", ".join(f"{workers}: {count}" for workers, count in sorted(native.items()))
+        mixed_counts = ", ".join(f"{workers}: {count}" for workers, count in sorted(mixed.items()))
         body.append(
-            f"{row['platform']} & {native_counts} & {mixed_counts} & {len(row['changed_decoders'])}/12 & {changed} ",
+            f"{row['platform']} & {native_counts} & {mixed_counts} & {len(row['changed_decoders'])}/12 ",
         )
     return (r"\\" + "\n").join(body) + "\n"
 
@@ -1475,11 +1212,10 @@ def _plot_worker_scaling(aggregates: tuple[Aggregate, ...], destination: Path) -
             axis.axhline(1, color="0.45", linewidth=0.8, linestyle="--")
             axis.grid(alpha=0.18)
             axis.set_title(f"{PLATFORM_LABELS[machine_type]} — {workload}", fontsize=9)
-            if column_index == 0:
-                axis.set_ylabel("Throughput / paired $w=0$")
             if row_index == len(EXPECTED_MACHINES) - 1:
                 axis.set_xlabel("DataLoader workers")
             axis.set_xticks(WORKER_GRID)
+    figure.supylabel("Relative DataLoader throughput\nHigher is better", fontsize=9)
     axes[0, 0].legend(frameon=False, ncol=2, fontsize=8)
     figure.savefig(destination)
     plt.close(figure)
@@ -1500,88 +1236,9 @@ def _plot_protocol_regret(decisions: list[dict[str, Any]], destination: Path) ->
     axis.axhline(0, color="0.3", linewidth=0.8)
     axis.axhline(PRACTICAL_MARGIN * 100, color="0.3", linewidth=0.9, linestyle="--", label="10% margin")
     axis.set_xticks(positions, labels, rotation=25, ha="right")
-    axis.set_ylabel("Loader regret after worker tuning (%)")
+    axis.set_ylabel("DataLoader throughput loss (%)\nLower is better")
     axis.grid(axis="y", alpha=0.2)
     axis.legend(frameon=False)
-    figure.savefig(destination)
-    plt.close(figure)
-
-
-def _plot_recommendations(recommendations: dict[str, Any], destination: Path) -> None:
-    plt = _pyplot()
-    import numpy as np
-    from matplotlib.patches import Rectangle
-
-    cells = recommendations["cells"]
-    cell_by_scenario = {(row["machine_type"], row["workload"]): row for row in cells}
-    scenarios = [(machine_type, workload) for machine_type in EXPECTED_MACHINES for workload in EXPECTED_ITEM_COUNTS]
-    successes = recommendations["robustness_audit"]["successes"]
-    portable_speed = set(recommendations["portable_speed_candidates"])
-
-    def sort_key(decoder: str) -> tuple[int, float, str]:
-        if decoder in portable_speed:
-            group = 0
-        elif successes[decoder] == ROBUSTNESS_AUDIT_ITEM_COUNT:
-            group = 1
-        else:
-            group = 2
-        return group, recommendations["worst_gap_percent"][decoder], decoder
-
-    decoders = sorted(recommendations["worst_gap_percent"], key=sort_key)
-    gaps = np.array(
-        [
-            [
-                next(
-                    item["gap_from_leader_percent"]
-                    for item in cell_by_scenario[scenario]["decoders"]
-                    if item["decoder"] == decoder
-                )
-                for scenario in scenarios
-            ]
-            for decoder in decoders
-        ],
-    )
-
-    figure, axis = plt.subplots(figsize=(7.1, 5.4), constrained_layout=True)
-    image = axis.imshow(gaps, cmap="Blues_r", vmin=0, vmax=max(35, float(gaps.max())), aspect="auto")
-    for row_index, _decoder in enumerate(decoders):
-        for column_index, _scenario in enumerate(scenarios):
-            gap = gaps[row_index, column_index]
-            decoder_row = next(item for item in cell_by_scenario[_scenario]["decoders"] if item["decoder"] == _decoder)
-            if decoder_row["within_speed_margin"]:
-                axis.add_patch(
-                    Rectangle(
-                        (column_index - 0.49, row_index - 0.49),
-                        0.98,
-                        0.98,
-                        fill=False,
-                        edgecolor="black",
-                        linewidth=1.2,
-                    ),
-                )
-            text_color = "white" if gap < 14 else "black"
-            axis.text(
-                column_index,
-                row_index,
-                f"{gap:.1f}",
-                ha="center",
-                va="center",
-                color=text_color,
-                fontsize=6.5,
-            )
-
-    labels = [
-        f"{PLATFORM_LABELS[machine_type]}\n{workload.removeprefix('fodb-')}" for machine_type, workload in scenarios
-    ]
-    axis.set_xticks(range(len(scenarios)), labels, rotation=32, ha="right")
-    axis.set_yticks(range(len(decoders)), decoders)
-    for tick, decoder in zip(axis.get_yticklabels(), decoders, strict=True):
-        if successes[decoder] == ROBUSTNESS_AUDIT_ITEM_COUNT:
-            tick.set_fontweight("bold")
-    axis.tick_params(axis="both", length=0, labelsize=8)
-    colorbar = figure.colorbar(image, ax=axis, pad=0.015)
-    colorbar.set_label("Below local best mean loader supply (%)")
-    axis.set_xlabel("16-vCPU platform and workload")
     figure.savefig(destination)
     plt.close(figure)
 

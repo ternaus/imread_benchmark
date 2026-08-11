@@ -9,7 +9,13 @@ The repository no longer ships historical result JSON or a second execution
 path. New paper tables and figures must be generated from committed schema-2
 bundles through the canonical publication layer.
 
-Preprint: [Single-Thread JPEG Decoder Benchmarks Mis-Evaluate ML Data Loaders](https://arxiv.org/abs/2605.08731).
+Preprint: [Choosing a JPEG Decoder for PyTorch DataLoaders: Workload-Specific Throughput on Four CPUs](https://arxiv.org/abs/2605.08731).
+
+The paper fixes `num_workers=8` and compares each decoder with Pillow on the
+same CPU and JPEG workload. It reports camera originals and social-media
+processed JPEGs separately. The full worker sweep and absolute images-per-second
+tables are in the appendix, so the main result stays a speed comparison rather
+than a training-time claim.
 
 ## What is measured
 
@@ -45,10 +51,9 @@ events, runtime worker probes, full provenance, derived statistics, payload
 hashes, and a final `COMMITTED.json`. A result is invisible until the marker
 and every checksum validate.
 
-## Recommended paper workloads
+## Article workloads
 
-The primary strengthening campaign uses selected scenes from the Forchheim
-Image Database (FODB):
+The article uses selected scenes from the Forchheim Image Database (FODB):
 
 - `fodb-native`: original camera JPEGs, providing the large-resolution regime;
 - `fodb-mixed`: the same matched scenes and devices after Facebook, Instagram,
@@ -306,9 +311,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for decoder adapter requirements.
 ## Citation
 
 ```bibtex
-@misc{iglovikov2026singlethreadjpegdecoderbenchmarks,
-  title={Single-Thread JPEG Decoder Benchmarks Mis-Evaluate ML Data Loaders},
-  author={Vladimir Iglovikov},
+@misc{iglovikov2026choosingjpegdecoder,
+  title={Choosing a JPEG Decoder for PyTorch DataLoaders: Workload-Specific Throughput on Four CPUs},
+  author={Vladimir Iglovikov and Dmitry Kosarevsky},
   year={2026},
   eprint={2605.08731},
   archivePrefix={arXiv},

@@ -3,25 +3,23 @@ from __future__ import annotations
 import pytest
 
 from imread_benchmark.analysis.fodb_paper import (
-    DEPLOYMENT_WORKERS,
-    EXPECTED_MACHINES,
-    ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT,
-    ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES,
-    ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT,
-    ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES,
-    ROBUSTNESS_AUDIT_ITEM_COUNT,
-    ROBUSTNESS_AUDIT_SUCCESSES,
+    COMPATIBILITY_AUDIT_EMPTY_DHT_ITEM_COUNT,
+    COMPATIBILITY_AUDIT_EMPTY_DHT_SUCCESSES,
+    COMPATIBILITY_AUDIT_FOUR_COMPONENT_ITEM_COUNT,
+    COMPATIBILITY_AUDIT_FOUR_COMPONENT_SUCCESSES,
+    COMPATIBILITY_AUDIT_ITEM_COUNT,
+    COMPATIBILITY_AUDIT_SUCCESSES,
     WORKER12_DECODERS,
     WORKER12_PLAN_SCOPES,
     WORKER16_DECODERS,
     WORKER16_PLAN_SCOPES,
     Aggregate,
-    _cell_recommendation_table,
+    _compatibility_audit,
     _decoder_coverage_table,
     _linear_quantile,
     _ranks,
-    _recommendation_rows,
     _worker16_candidate_rows,
+    _worker_transfer_table,
     _workload_descriptors,
 )
 
@@ -83,8 +81,6 @@ def test_rank_and_quantile_helpers_are_deterministic() -> None:
 def test_workers_12_followup_is_frozen_to_87_cells() -> None:
     assert sum(len(decoders) for decoders in WORKER12_DECODERS.values()) == 87
     assert sum(len(decoders) * 5 for decoders in WORKER12_DECODERS.values()) == 435
-    assert DEPLOYMENT_WORKERS == (4, 8, 12, 16)
-
     plan_scopes = {
         cell: decoders for scoped_cells in WORKER12_PLAN_SCOPES.values() for cell, decoders in scoped_cells.items()
     }
@@ -135,153 +131,42 @@ def test_workers_16_candidates_require_material_and_consistent_workers_12_gain()
     assert [row["decoder"] for row in candidates["cells"][0]["decoders"]] == ["pillow"]
 
 
-def test_robustness_audit_reports_bitstream_and_output_contract_separately() -> None:
-    assert ROBUSTNESS_AUDIT_ITEM_COUNT == (
-        ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT + ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT
+def test_compatibility_audit_reports_bitstream_and_output_contract_separately() -> None:
+    audit = _compatibility_audit()
+
+    assert COMPATIBILITY_AUDIT_ITEM_COUNT == (
+        COMPATIBILITY_AUDIT_EMPTY_DHT_ITEM_COUNT + COMPATIBILITY_AUDIT_FOUR_COMPONENT_ITEM_COUNT
     )
-    assert set(ROBUSTNESS_AUDIT_SUCCESSES) == set(ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES)
-    assert set(ROBUSTNESS_AUDIT_SUCCESSES) == set(ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES)
-    for decoder, combined_successes in ROBUSTNESS_AUDIT_SUCCESSES.items():
+    assert set(COMPATIBILITY_AUDIT_SUCCESSES) == set(COMPATIBILITY_AUDIT_EMPTY_DHT_SUCCESSES)
+    assert set(COMPATIBILITY_AUDIT_SUCCESSES) == set(COMPATIBILITY_AUDIT_FOUR_COMPONENT_SUCCESSES)
+    for decoder, combined_successes in COMPATIBILITY_AUDIT_SUCCESSES.items():
         assert combined_successes == (
-            ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES[decoder] + ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES[decoder]
+            COMPATIBILITY_AUDIT_EMPTY_DHT_SUCCESSES[decoder] + COMPATIBILITY_AUDIT_FOUR_COMPONENT_SUCCESSES[decoder]
         )
 
-    table = _decoder_coverage_table(
-        {
-            "robustness_audit": {
-                "categories": {
-                    "empty_dht_bitstream": {
-                        "item_count": ROBUSTNESS_AUDIT_EMPTY_DHT_ITEM_COUNT,
-                        "successes": ROBUSTNESS_AUDIT_EMPTY_DHT_SUCCESSES,
-                    },
-                    "four_component_rgb": {
-                        "item_count": ROBUSTNESS_AUDIT_FOUR_COMPONENT_ITEM_COUNT,
-                        "successes": ROBUSTNESS_AUDIT_FOUR_COMPONENT_SUCCESSES,
-                    },
-                },
-                "item_count": ROBUSTNESS_AUDIT_ITEM_COUNT,
-                "successes": ROBUSTNESS_AUDIT_SUCCESSES,
-            },
-        },
-    )
+    assert audit["item_count"] == COMPATIBILITY_AUDIT_ITEM_COUNT
+    assert audit["successes"] == COMPATIBILITY_AUDIT_SUCCESSES
+    table = _decoder_coverage_table(audit)
 
     assert r"\texttt{ajpegli} & 0/276 & 0/1 & 0/277" in table
     assert r"\texttt{torchvision} & 276/276 & 0/1 & 276/277" in table
     assert r"\texttt{simplejpeg} & 276/276 & 1/1 & 277/277" in table
 
 
-def test_recommendations_select_the_minimax_portable_decoder() -> None:
-    decoders = (*[f"decoder-{index}" for index in range(8)], "simplejpeg", "imagecodecs", "opencv", "pyvips")
-    aggregates = []
-    for scenario_index, (machine_type, workload) in enumerate(
-        (machine_type, workload) for machine_type in EXPECTED_MACHINES for workload in ("fodb-native", "fodb-mixed")
-    ):
-        for decoder in decoders:
-            mean = 80.0
-            if decoder == f"decoder-{scenario_index}":
-                mean = 100.0
-            elif decoder == "simplejpeg":
-                mean = 97.0
-            elif decoder == "imagecodecs":
-                mean = 96.0
-            aggregates.append(
-                Aggregate(
-                    workload=workload,
-                    machine_type=machine_type,
-                    protocol="loader-supply",
-                    decoder=decoder,
-                    requested_threads=1 if decoder in {"opencv", "pyvips"} else None,
-                    workers=8,
-                    repetitions=(0, 1, 2, 3, 4),
-                    raw_run_means=(mean,) * 5,
-                    mean=mean,
-                    sample_std=0.0,
-                ),
-            )
-            if decoder == "simplejpeg":
-                aggregates.append(
-                    Aggregate(
-                        workload=workload,
-                        machine_type=machine_type,
-                        protocol="loader-supply",
-                        decoder=decoder,
-                        requested_threads=None,
-                        workers=0,
-                        repetitions=(0, 1, 2, 3, 4),
-                        raw_run_means=(200.0,) * 5,
-                        mean=200.0,
-                        sample_std=0.0,
-                    ),
-                )
-
-    robustness_audit_successes = dict.fromkeys(decoders, 277)
-    recommendations = _recommendation_rows(tuple(aggregates), robustness_audit_successes)
-
-    assert recommendations["portable_decoder"] == "simplejpeg"
-    assert recommendations["portable_max_gap_percent"] == pytest.approx(3.0)
-    assert recommendations["portable_speed_candidates"] == ["simplejpeg", "imagecodecs"]
-    assert recommendations["universal_recommendations"] == ["imagecodecs", "simplejpeg"]
-    assert {
-        item["workers"]
-        for cell in recommendations["cells"]
-        for item in cell["decoders"]
-        if item["decoder"] == "simplejpeg"
-    } == {8}
-
-
-def test_recommendations_require_complete_robustness_audit() -> None:
-    decoders = (*[f"decoder-{index}" for index in range(8)], "simplejpeg", "imagecodecs", "opencv", "pyvips")
-    aggregates = []
-    for machine_type, workload in (
-        (machine_type, workload) for machine_type in EXPECTED_MACHINES for workload in ("fodb-native", "fodb-mixed")
-    ):
-        for decoder in decoders:
-            mean = 100.0 if decoder == "imagecodecs" else 95.0 if decoder == "simplejpeg" else 80.0
-            aggregates.append(
-                Aggregate(
-                    workload=workload,
-                    machine_type=machine_type,
-                    protocol="loader-supply",
-                    decoder=decoder,
-                    requested_threads=1 if decoder in {"opencv", "pyvips"} else None,
-                    workers=8,
-                    repetitions=(0, 1, 2, 3, 4),
-                    raw_run_means=(mean,) * 5,
-                    mean=mean,
-                    sample_std=0.0,
-                ),
-            )
-    robustness_audit_successes = dict.fromkeys(decoders, 277)
-    robustness_audit_successes["imagecodecs"] = 276
-
-    recommendations = _recommendation_rows(tuple(aggregates), robustness_audit_successes)
-
-    assert recommendations["portable_decoder"] == "simplejpeg"
-    assert recommendations["portable_speed_candidates"] == ["imagecodecs", "simplejpeg"]
-    assert recommendations["universal_recommendations"] == ["simplejpeg"]
-    assert all("imagecodecs" not in cell["recommended"] for cell in recommendations["cells"])
-
-
-def test_cell_recommendation_table_exposes_audited_choices_and_workers() -> None:
-    table = _cell_recommendation_table(
-        {
-            "cells": [
-                {
-                    "decoders": [
-                        {"decoder": "pillow", "gap_from_leader_percent": 2.0, "recommended": True, "workers": 12},
-                        {"decoder": "opencv", "gap_from_leader_percent": 8.0, "recommended": True, "workers": 16},
-                        {"decoder": "turbojpeg", "gap_from_leader_percent": 0.0, "recommended": False, "workers": 16},
-                    ],
-                    "leader": "turbojpeg",
-                    "leader_workers": 16,
-                    "machine_type": "c4-standard-16",
-                    "platform": "Intel 8581C",
-                    "workload": "fodb-mixed",
-                },
-            ],
-        },
+def test_worker_transfer_table_keeps_counts_readable_and_compact() -> None:
+    table = _worker_transfer_table(
+        [
+            {
+                "changed_decoders": [f"decoder-{index}" for index in range(11)],
+                "mixed_peak_worker_counts": {12: 1, 16: 11},
+                "native_peak_worker_counts": {0: 4, 12: 7, 16: 1},
+                "platform": "Intel 8581C",
+            },
+        ],
     )
 
-    assert r"\texttt{pillow} ($w=12$; 2.0\%)" in table
-    assert r"\texttt{opencv} ($w=16$; 8.0\%)" in table
-    assert r"\texttt{turbojpeg} ($w=16$)" in table
+    assert "0: 4, 12: 7, 16: 1" in table
+    assert "12: 1, 16: 11" in table
+    assert "11/12" in table
+    assert table.count(" & ") == 3
+    assert r"\texttt" not in table

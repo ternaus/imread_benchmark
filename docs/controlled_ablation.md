@@ -4,7 +4,8 @@ The article uses two complementary kinds of evidence:
 
 - FODB `fodb-native` and `fodb-mixed` are real workloads with naturally varying
   resolution, quantization tables, metadata, processing service, and compressed
-  size. They answer whether recommendations transfer to a realistic mixture.
+  size. They show how measured decoder and DataLoader throughput changes across
+  a realistic mixture.
 - The controlled package changes requested long edge and encoder quality while
   holding source pixels, encoder build, chroma subsampling, metadata policy,
   image order, and source membership fixed. It supports bounded mechanism

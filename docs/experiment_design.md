@@ -6,9 +6,8 @@ The paper should make three bounded claims:
 
 1. Isolated single-thread decode rank is not a reliable proxy for decoder-plus-
    loader supply rank on named CPU platforms and workloads.
-2. Decoder recommendations and worker saturation points can change across a
-   camera-native high-resolution workload and a realistic social-media-processed
-   workload.
+2. Decoder ranks and worker saturation points can change across a camera-native
+   high-resolution workload and a realistic social-media-processed workload.
 3. Observed loader supply is only a component measurement and does not imply a
    training-speed difference without measured consumer demand or an end-to-end
    training protocol.

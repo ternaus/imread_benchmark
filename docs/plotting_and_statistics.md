@@ -53,7 +53,7 @@ normalization, and decorative charts without a paper claim.
 
 FODB's natural variants are intentionally heterogeneous. Stratifying them by
 megapixels, bits per pixel, quantization-table digest, or quality estimate is a
-descriptive robustness analysis. It does not identify a causal “quality effect.”
+descriptive workload analysis. It does not identify a causal “quality effect.”
 
 A causal figure needs the controlled resolution × quality package described in
 [Experiment design](experiment_design.md), with the encoder, source images,
