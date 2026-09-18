@@ -960,9 +960,11 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
             "",
             "## Compatibility audit",
             "",
-            "The empty-DHT test measures recovery from one malformed bitstream pattern. "
-            "The four-component test measures conversion to the normalized three-channel RGB contract; "
-            "the sentinel is not classified as corrupt.",
+            (
+                "The empty-DHT test measures recovery from one malformed bitstream pattern. "
+                "The four-component test measures conversion to the normalized three-channel RGB contract; "
+                "the sentinel is not classified as corrupt."
+            ),
             "",
             "| Decoder | Empty-DHT bitstreams | Four-component RGB | Combined |",
             "| --- | ---: | ---: | ---: |",
@@ -981,8 +983,10 @@ def _summary_markdown(evidence: dict[str, Any]) -> str:
             "",
             "## Protocol decision",
             "",
-            "| Workload | Platform | Decode leader | Loader leader | Workers | Regret | "
-            "Spearman rho | Top 10% throughput group |",
+            (
+                "| Workload | Platform | Decode leader | Loader leader | Workers | Regret | "
+                "Spearman rho | Top 10% throughput group |"
+            ),
             "| --- | --- | --- | --- | ---: | ---: | ---: | --- |",
         ],
     )
