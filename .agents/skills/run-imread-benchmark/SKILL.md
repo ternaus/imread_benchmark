@@ -32,6 +32,7 @@ uv run imread-benchmark list-decoders
 uv run imread-benchmark dataset fodb-package \
   --archive ~/data/fodb-part01.zip \
   --archive ~/data/fodb-part02.zip \
+  --archive ~/data/fodb-part03.zip \
   --output-root ~/data/fodb-benchmark \
   --scene-count 12 \
   --seed 20260729
@@ -49,13 +50,28 @@ uv run imread-benchmark plan expand plans/fodb/fodb-native.yaml \
   --output expanded-plan.json
 ```
 
-Before launching the full matrix, instantiate and run
-`examples/fodb-smoke.template.yaml` the same way: it is the preregistered
-nine-run Pillow/OpenCV gate (both protocols, workers 0 and 2, one block).
-
-Capture platform provenance and provision the frozen worker environment:
+Before launching the full matrix, run the preregistered nine-run
+Pillow/OpenCV smoke gate (both protocols, workers 0 and 2, one block) against
+`fodb-native`:
 
 ```bash
+uv run imread-benchmark plan instantiate \
+  examples/fodb-smoke.template.yaml \
+  --package-descriptor /data/packages/<package-id>/package.json \
+  --output-dir plans/smoke \
+  --workload fodb-native
+```
+
+Run `plans/smoke/fodb-native.yaml` with the `campaign run` command below and
+validate its bundles before substituting a full-matrix plan.
+
+Capture platform provenance and provision the frozen worker environment. Commit
+every source change first: `REVISION` and the environment cache key cover
+`HEAD`, `pyproject.toml`, and `uv.lock`, not uncommitted source edits, so a dirty
+worktree can measure stale installed code or reuse results for different code.
+
+```bash
+test -z "$(git status --porcelain)" || { echo "commit changes first" >&2; exit 1; }
 REVISION=$(git rev-parse HEAD)
 uv run imread-benchmark platform capture \
   --output artifacts/platform.json --machine-type local --location local
@@ -64,10 +80,11 @@ uv run imread-benchmark environment provision \
   --project-root . --cache-root .cache/environments
 ```
 
-Use the emitted descriptor and Python path:
+Use the emitted descriptor and Python path; pass the smoke plan first, then the
+full-matrix plan:
 
 ```bash
-<environment-python> -m imread_benchmark.cli campaign run plans/fodb/fodb-native.yaml \
+<environment-python> -m imread_benchmark.cli campaign run plans/smoke/fodb-native.yaml \
   --package-descriptor /data/packages/<package-id>/package.json \
   --environment-descriptor <environment.json> \
   --platform-descriptor artifacts/platform.json \
@@ -98,6 +115,11 @@ materializes one sequential dataset payload, restores or builds a frozen
 environment, pulls prior committed bundles, runs only missing identities,
 checkpoints every committed bundle, writes `DONE` or `FAILED` last, and deletes
 itself unless retention was requested.
+
+Launch at most one campaign at a time per results store and plan. Two runners
+that start before either commits both treat the same identities as missing; one
+create-only commit wins and the other campaign ends `FAILED`. Wait for `DONE` or
+`FAILED` before relaunching or resuming the same plan.
 
 ## Validate and publish
 

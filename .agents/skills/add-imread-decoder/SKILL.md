@@ -41,7 +41,8 @@ decoders belong to `mainstream`.
 In `pyproject.toml`, add one dotted key under `[project]`:
 `entry-points."imread_benchmark.decoders".<name> = "imread_benchmark.decoders.<name>_decoder:<Class>"`,
 and add the distribution to the matching `optional-dependencies.<group>` list. Refresh `uv.lock`
-and verify `uv sync --frozen --no-editable` can provision that group. Registry
+and verify `uv sync --frozen --no-editable --extra <group>` installs the new
+distribution (a bare sync selects no decoder extra). Registry
 discovery must continue through entry points; do not add a manual registry.
 
 ## Required tests
